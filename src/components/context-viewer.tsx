@@ -53,8 +53,8 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
         if (isLoading) {
             return (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                    <Loader className="w-12 h-12 mb-4 animate-spin" />
-                    <p className="text-sm">Rendering PDF...</p>
+                    <Loader className="w-8 h-8 mb-2 animate-spin" />
+                    <p className="text-xs">Rendering PDF...</p>
                 </div>
             );
         }
@@ -62,23 +62,23 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
             return <div className="prose max-w-none">{renderedContent}</div>;
         }
         return (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <FileQuestion className="w-12 h-12 mb-2" />
-                <p className="text-sm">No context file selected.</p>
-                <p className="text-xs">Upload or select a file to view its content.</p>
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4 text-center">
+                <FileQuestion className="w-8 h-8 mb-2" />
+                <p className="text-xs font-semibold">No context file selected</p>
+                <p className="text-xs mt-1">Upload or select a file to view its content.</p>
             </div>
         );
     }
 
   return (
     <Card className="flex-grow flex flex-col min-h-0">
-      <CardHeader>
-        <CardTitle className="font-headline flex items-center gap-2">
+      <CardHeader className="p-4">
+        <CardTitle className="font-headline flex items-center gap-2 text-xl">
           Context: 
-          <span className="text-muted-foreground">{contextFile?.name || 'No file selected'}</span>
+          <span className="text-muted-foreground font-normal text-base">{contextFile?.name || 'No file selected'}</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col min-h-0">
+      <CardContent className="flex-grow flex flex-col min-h-0 p-0 px-4 pb-4">
         <ScrollArea className="flex-grow rounded-md border bg-white overflow-auto">
             {getDisplayContent()}
         </ScrollArea>

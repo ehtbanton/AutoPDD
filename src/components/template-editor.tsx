@@ -12,10 +12,10 @@ interface TemplateEditorProps {
 export function TemplateEditor({ content }: TemplateEditorProps) {
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader>
-        <CardTitle className="font-headline">Template Document</CardTitle>
+      <CardHeader className="p-4">
+        <CardTitle className="font-headline text-xl">Template Document</CardTitle>
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col min-h-0">
+      <CardContent className="flex-grow flex flex-col min-h-0 p-0 px-4 pb-4">
         <ScrollArea className="flex-grow rounded-md border p-4 bg-white">
           {content ? (
             <div
@@ -24,8 +24,8 @@ export function TemplateEditor({ content }: TemplateEditorProps) {
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <FileUp className="w-16 h-16 mb-4" />
-              <p>Press the template button on the left to get started...</p>
+              <FileUp className="w-12 h-12 mb-4" />
+              <p className="text-sm">Press the template button on the left to get started...</p>
             </div>
           )}
         </ScrollArea>

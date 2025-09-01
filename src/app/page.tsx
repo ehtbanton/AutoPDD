@@ -174,7 +174,7 @@ const Page: FC = () => {
       </header>
 
       <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 lg:gap-4 min-h-0">
-        <div className="lg:col-span-1 flex flex-col gap-4 min-h-0">
+        <div className="lg:col-span-1 flex flex-col gap-2 min-h-0">
           <ControlsPanel
             logs={logs}
             onTemplateUpload={handleTemplateUpload}

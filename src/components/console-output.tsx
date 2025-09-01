@@ -23,10 +23,10 @@ export function ConsoleOutput({ logs }: ConsoleOutputProps) {
 
   return (
     <div>
-       <h3 className="text-sm font-medium mb-2">Console</h3>
-      <Card className="h-48">
+       <h3 className="text-sm font-medium mb-1">Console</h3>
+      <Card className="h-32">
         <ScrollArea className="h-full" ref={viewportRef}>
-          <CardContent className="p-4">
+          <CardContent className="p-2">
             <pre className="text-xs whitespace-pre-wrap">
               {logs.map((log, index) => (
                 <code key={index} className="font-code block animate-in fade-in duration-300">
