@@ -119,8 +119,9 @@ const Page: FC = () => {
       reader.onload = async (e) => {
         const content = e.target?.result as ArrayBuffer;
         
-        // Extract text from PDF
-        const loadingTask = pdfjs.getDocument(new Uint8Array(content));
+        // Extract text from PDF - use a copy of the buffer to avoid detachment issues
+        const contentCopyForTextExtraction = content.slice(0);
+        const loadingTask = pdfjs.getDocument(new Uint8Array(contentCopyForTextExtraction));
         const pdf = await loadingTask.promise;
         const numPages = pdf.numPages;
         let textContent = '';
@@ -339,7 +340,7 @@ const Page: FC = () => {
   };
 
   return (
-    <main className="h-full flex flex-col p-4 gap-4">
+    <main className="h-full flex flex-col p-4 gap-4 bg-background">
       <header className="text-center lg:text-left">
         <h1 className="font-headline text-5xl font-bold text-primary">
           AutoPDD
