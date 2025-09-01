@@ -33,15 +33,15 @@ sys.stderr.reconfigure(line_buffering=True)
 # --- 1. SETUP ---
 project_name = "prime_road"
 
-# Correctly determine the base directory (the project root)
-# The script is in /src/backend/src, so we go up three levels.
+# Correctly determine the backend directory
+# The script is in /src/backend/src, so we go up one level.
 script_dir = os.path.dirname(os.path.abspath(__file__))
-base_dir = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+backend_dir = os.path.abspath(os.path.join(script_dir, '..'))
 
-# Use the root-level src directory for all paths
-template_doc_folder = os.path.join(base_dir, "src", "pdd_template")
-context_folder = os.path.join(base_dir, "src", "provided_documents", project_name)
-output_doc_folder = os.path.join(base_dir, "src", "auto_pdd_output")
+# Use the backend directory for all paths
+template_doc_folder = os.path.join(backend_dir, "pdd_template")
+context_folder = os.path.join(backend_dir, "provided_documents", project_name)
+output_doc_folder = os.path.join(backend_dir, "auto_pdd_output")
 
 # Create the single output document from the template if it doesn't exist yet
 output_path = create_output_doc_from_template(project_name)

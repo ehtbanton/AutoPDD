@@ -56,11 +56,11 @@ def load_word_doc_to_string(folder_path):
 
 def create_output_doc_from_template(project_name):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Go up 3 levels to reach project root from src/backend/src
-    base_dir = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+    # Go up 2 levels to reach backend folder from src/backend/src
+    backend_dir = os.path.abspath(os.path.join(script_dir, '..'))
 
-    template_folder = os.path.join(base_dir, "src", "pdd_template")
-    output_folder = os.path.join(base_dir, "src", "auto_pdd_output")
+    template_folder = os.path.join(backend_dir, "pdd_template")
+    output_folder = os.path.join(backend_dir, "auto_pdd_output")
     
     # Ensure template folder exists
     if not os.path.isdir(template_folder):

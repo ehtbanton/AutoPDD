@@ -8,9 +8,9 @@ import { Buffer } from 'buffer';
 import mammoth from "mammoth";
 
 
-const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'pdd_template');
-const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'provided_documents', 'prime_road');
-const UPLOAD_DIR_OUTPUT = path.join(process.cwd(), 'src', 'auto_pdd_output');
+const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'backend', 'pdd_template');
+const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents', 'prime_road');
+const UPLOAD_DIR_OUTPUT = path.join(process.cwd(), 'src', 'backend', 'auto_pdd_output');
 const OUTPUT_FILE_NAME = 'AutoPDD_prime_road.docx';
 
 async function ensureDir(dir: string) {
