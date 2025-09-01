@@ -4,12 +4,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileUp, FileText } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 interface TemplateEditorProps {
   content: string;
 }
 
 export function TemplateEditor({ content }: TemplateEditorProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // This effect ensures that styles from the fetched HTML are applied.
+  useEffect(() => {
+    if (contentRef.current && content) {
+      const shadowRoot = contentRef.current.attachShadow({ mode: 'open' });
+      shadowRoot.innerHTML = content;
+    }
+  }, [content]);
+
+
   return (
     <Card className="h-full flex flex-col flex-grow min-h-0">
       <CardHeader className="p-4">
@@ -22,8 +34,8 @@ export function TemplateEditor({ content }: TemplateEditorProps) {
         <ScrollArea className="flex-grow rounded-md border bg-white">
           {content ? (
             <div
-              className="prose max-w-none p-4"
-              dangerouslySetInnerHTML={{ __html: content }}
+              ref={contentRef}
+              className="p-4 prose max-w-none"
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

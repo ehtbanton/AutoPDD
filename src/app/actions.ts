@@ -122,9 +122,43 @@ export async function getOutputFileAsHtml(): Promise<string | null> {
 
     // Now, try to read the file (it should exist at this point if a template was found)
     try {
-        const arrayBuffer = await fs.readFile(outputFilePath);
-        const result = await mammoth.convertToHtml({ buffer: arrayBuffer });
-        return result.value;
+        const docxBuffer = await fs.readFile(outputFilePath);
+        
+        // Use a Python script with pypandoc for better conversion
+        const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', 'convert_to_html.py');
+        
+        return new Promise((resolve, reject) => {
+            const pythonProcess = spawn('python', [pythonScriptPath]);
+
+            let htmlOutput = '';
+            let errorOutput = '';
+
+            pythonProcess.stdout.on('data', (data) => {
+                htmlOutput += data.toString();
+            });
+
+            pythonProcess.stderr.on('data', (data) => {
+                errorOutput += data.toString();
+            });
+
+            pythonProcess.on('close', (code) => {
+                if (code === 0) {
+                    resolve(htmlOutput);
+                } else {
+                    console.error("Pandoc conversion error:", errorOutput);
+                    reject(new Error(`Python script for HTML conversion exited with code ${code}: ${errorOutput}`));
+                }
+            });
+
+            pythonProcess.on('error', (err) => {
+                reject(err);
+            });
+
+            // Write the docx buffer to the Python script's stdin
+            pythonProcess.stdin.write(docxBuffer);
+            pythonProcess.stdin.end();
+        });
+
     } catch (readError) {
         console.error("Error reading or converting output file:", readError);
         return null;
