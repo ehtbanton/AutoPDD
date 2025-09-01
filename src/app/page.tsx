@@ -90,48 +90,57 @@ const Page: FC = () => {
   };
 
   const handleContextUpload = (files: FileList) => {
+    log(`Attempting to upload ${files.length} context file(s)...`);
     const newFiles: ContextFile[] = [];
     let processedCount = 0;
-
-    Array.from(files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const content = e.target?.result as string;
-            newFiles.push({ name: file.name, content });
-            processedCount++;
-            if (processedCount === files.length) {
-                setContextFiles(prev => [...prev, ...newFiles]);
-                if (!selectedContextFile || contextFiles.length === 0) {
-                    setSelectedContextFile(newFiles[0]);
-                }
-                log(`${files.length} context file(s) uploaded successfully.`);
-                toast({
-                    title: "Upload Successful",
-                    description: `${files.length} context file(s) have been loaded.`,
-                    variant: "default",
-                    className: "bg-accent text-accent-foreground",
-                });
-            }
-        };
-        reader.onerror = () => {
-          log(`Error reading file: ${file.name}`);
+  
+    const fileArray = Array.from(files);
+  
+    if (fileArray.length === 0) {
+      log("No files selected for context upload.");
+      return;
+    }
+  
+    fileArray.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        newFiles.push({ name: file.name, content });
+        log(`Successfully processed "${file.name}".`);
+        
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setContextFiles(prev => [...prev, ...newFiles]);
+          if (!selectedContextFile || contextFiles.length === 0) {
+            setSelectedContextFile(newFiles[0]);
+          }
+          log(`${newFiles.length} context file(s) uploaded successfully.`);
           toast({
-              title: "Upload Failed",
-              description: `There was an error reading "${file.name}".`,
-              variant: "destructive",
+              title: "Upload Successful",
+              description: `${newFiles.length} context file(s) have been loaded.`,
+              variant: "default",
+              className: "bg-accent text-accent-foreground",
           });
-          processedCount++;
-          if (processedCount === files.length) {
-              // Still update with successfully processed files
-              if (newFiles.length > 0) {
-                  setContextFiles(prev => [...prev, ...newFiles]);
-                   if (!selectedContextFile || contextFiles.length === 0) {
-                    setSelectedContextFile(newFiles[0]);
-                }
-              }
+        }
+      };
+      reader.onerror = (error) => {
+        log(`Error reading file "${file.name}": ${error}`);
+        toast({
+            title: "Upload Failed",
+            description: `There was an error reading "${file.name}".`,
+            variant: "destructive",
+        });
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          if (newFiles.length > 0) {
+            setContextFiles(prev => [...prev, ...newFiles]);
+            if (!selectedContextFile || contextFiles.length === 0) {
+              setSelectedContextFile(newFiles[0]);
+            }
           }
         }
-        reader.readAsDataURL(file);
+      }
+      reader.readAsDataURL(file);
     });
   };
   

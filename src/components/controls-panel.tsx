@@ -46,7 +46,6 @@ export function ControlsPanel({
                 <FileUploadButton
                     onFileSelect={(files) => onContextUpload(files as FileList)}
                     variant="outline"
-                    accept=".pdf"
                     multiple
                 >
                     <File className="mr-2 h-4 w-4" /> Contexts
@@ -58,7 +57,7 @@ export function ControlsPanel({
             <h3 className="text-sm font-medium">Select Context File</h3>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between">
+                    <Button variant="outline" className="w-full justify-between" disabled={contextFiles.length === 0}>
                         <span>{selectedContextFile?.name || "Select a file"}</span>
                         <ChevronDown className="h-4 w-4" />
                     </Button>
