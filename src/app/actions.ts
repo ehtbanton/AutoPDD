@@ -5,8 +5,6 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import { Buffer } from 'buffer';
-import mammoth from "mammoth";
-
 
 const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'backend', 'pdd_template');
 const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents', 'prime_road');

@@ -104,14 +104,18 @@ for target_idx, target in enumerate(pdd_targets):
         response = fill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache)
 
     print("\n--- Response ---")
+    sys.stdout.flush()
     print(response)
+    sys.stdout.flush()
     print("-----------------------\n")
     sys.stdout.flush()
 
     response = cleanup_response(response)
 
     print("\n--- Revised response ---")
+    sys.stdout.flush()
     print(response)
+    sys.stdout.flush()
     print("-----------------------\n")
     sys.stdout.flush()
 

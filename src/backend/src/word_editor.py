@@ -66,6 +66,7 @@ def create_output_doc_from_template(project_name):
     if not os.path.isdir(template_folder):
         os.makedirs(template_folder)
         print(f"Created template directory: {template_folder}")
+        sys.stdout.flush()
         raise FileNotFoundError(f"Error: Template directory was missing. Please upload a template .docx file to this folder and try again.")
 
     template_path = next((os.path.join(template_folder, f) for f in os.listdir(template_folder) if f.lower().endswith('.docx') and not f.startswith('~$')), None)
