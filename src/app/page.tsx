@@ -30,12 +30,7 @@ const initialTemplateContent = `
 <p class="mb-4">The estimated total cost for the project is {{project_cost}}. A detailed breakdown is available in the attached financial statement.</p>
 `;
 
-const initialContextFiles: ContextFile[] = [
-    {
-        name: 'project_data.txt',
-        content: `contact_person: Jane Doe\nend_date: Q4 2024\nproject_cost: $250,000`,
-    }
-];
+const initialContextFiles: ContextFile[] = [];
 
 const initialLogs = [
   'Welcome to Context Editor!',
@@ -45,7 +40,7 @@ const initialLogs = [
 const Page: FC = () => {
   const [templateContent, setTemplateContent] = useState<string>(initialTemplateContent);
   const [contextFiles, setContextFiles] = useState<ContextFile[]>(initialContextFiles);
-  const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(initialContextFiles[0]);
+  const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const { toast } = useToast();
 
