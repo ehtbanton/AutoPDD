@@ -8,7 +8,7 @@ import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
 import mammoth from "mammoth";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getOutputFileAsHtml } from '@/app/actions';
 
 export type ContextFile = {
   name: string;
@@ -33,6 +33,7 @@ const Page: FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const processingRef = useRef<boolean>(false);
   const [templatePath, setTemplatePath] = useState<string>('');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
 
   const log = useCallback((message: string) => {
@@ -45,6 +46,19 @@ const Page: FC = () => {
     setLogs(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
   }, []);
 
+  const updateOutputViewer = useCallback(async () => {
+    try {
+        const html = await getOutputFileAsHtml();
+        if (html) {
+            setTemplateContent(html);
+        }
+    } catch (error) {
+        // It might fail if the file doesn't exist yet, which is fine initially.
+        console.warn("Could not fetch output file HTML", error);
+    }
+  }, []);
+
+
   const handleTemplateUpload = async (file: File) => {
     log(`Uploading template "${file.name}"...`);
     const reader = new FileReader();
@@ -53,18 +67,18 @@ const Page: FC = () => {
         const buffer = Buffer.from(arrayBuffer);
 
         try {
-            // Save the file on the server
+            // Save the file on the server and create the output doc
             await uploadTemplateFile(file.name, buffer.toString('base64'));
 
-            // Update the UI
-            const result = await mammoth.convertToHtml({ arrayBuffer });
-            setTemplateContent(result.value);
+            // Update the UI by fetching the newly created output doc
+            await updateOutputViewer();
+            
             setTemplatePath(file.name);
-            log(`Template "${file.name}" uploaded successfully.`);
+            log(`Template "${file.name}" uploaded and output file created.`);
 
             toast({
                 title: "Upload Successful",
-                description: `Template "${file.name}" has been loaded and saved.`,
+                description: `Template "${file.name}" has been loaded and output file created.`,
                 variant: "default",
                 className: "bg-accent text-accent-foreground",
             });
@@ -197,6 +211,9 @@ const Page: FC = () => {
     setIsProcessing(true);
     processingRef.current = true;
 
+    // Start polling for updates
+    pollingIntervalRef.current = setInterval(updateOutputViewer, 3000); // Poll every 3 seconds
+
     try {
         const stream = await runPythonBackend();
         const reader = stream.getReader();
@@ -209,7 +226,6 @@ const Page: FC = () => {
                 break;
             }
             const decodedChunk = decoder.decode(value, { stream: true });
-            // The script outputs can be messy, let's clean it up a bit.
             const lines = decodedChunk.split('\n').filter(line => line.trim() !== '');
             for (const line of lines) {
                 log(line);
@@ -231,14 +247,23 @@ const Page: FC = () => {
     } finally {
         setIsProcessing(false);
         processingRef.current = false;
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+        // Final update after processing is finished
+        log("Fetching final version of the document...");
+        await updateOutputViewer();
     }
 };
 
   const handleStop = () => {
     log("Stop button pressed. Attempting to stop processing...");
-    processingRef.current = false; // This will signal the loop to stop
-    // Note: The python process itself is not killed here, just the client-side listening.
-    // For true process killing, a more complex setup would be needed.
+    processingRef.current = false;
+    if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+    }
   };
 
   return (
