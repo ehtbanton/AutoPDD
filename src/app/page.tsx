@@ -101,7 +101,7 @@ const Page: FC = () => {
             processedCount++;
             if (processedCount === files.length) {
                 setContextFiles(prev => [...prev, ...newFiles]);
-                if (!selectedContextFile) {
+                if (!selectedContextFile || contextFiles.length === 0) {
                     setSelectedContextFile(newFiles[0]);
                 }
                 log(`${files.length} context file(s) uploaded successfully.`);
@@ -121,10 +121,17 @@ const Page: FC = () => {
               variant: "destructive",
           });
           processedCount++;
+          if (processedCount === files.length) {
+              // Still update with successfully processed files
+              if (newFiles.length > 0) {
+                  setContextFiles(prev => [...prev, ...newFiles]);
+                   if (!selectedContextFile || contextFiles.length === 0) {
+                    setSelectedContextFile(newFiles[0]);
+                }
+              }
+          }
         }
-        // For simplicity, reading PDFs as text.
-        // A real implementation would require a PDF parsing library.
-        reader.readAsText(file);
+        reader.readAsDataURL(file);
     });
   };
   
