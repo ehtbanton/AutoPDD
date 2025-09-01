@@ -11,11 +11,11 @@ interface TemplateEditorProps {
 
 export function TemplateEditor({ content }: TemplateEditorProps) {
   return (
-    <Card className="h-full min-h-[80vh] flex flex-col">
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="font-headline">Template Document</CardTitle>
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col">
+      <CardContent className="flex-grow flex flex-col min-h-0">
         <ScrollArea className="flex-grow rounded-md border p-4 bg-white">
           {content ? (
             <div

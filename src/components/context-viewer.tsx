@@ -71,7 +71,7 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
     }
 
   return (
-    <Card className="flex-grow flex flex-col">
+    <Card className="flex-grow flex flex-col min-h-0">
       <CardHeader>
         <CardTitle className="font-headline flex items-center gap-2">
           Context: 

@@ -163,8 +163,8 @@ const Page: FC = () => {
 
 
   return (
-    <main className="min-h-screen p-4 sm:p-6 lg:p-8">
-      <header className="mb-8 text-center lg:text-left">
+    <main className="h-full flex flex-col p-4">
+      <header className="mb-4 text-center lg:text-left">
         <h1 className="font-headline text-5xl font-bold text-primary">
           AutoPDD
         </h1>
@@ -173,8 +173,8 @@ const Page: FC = () => {
         </p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
-        <div className="lg:col-span-1 flex flex-col gap-8">
+      <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 lg:gap-4 min-h-0">
+        <div className="lg:col-span-1 flex flex-col gap-4 min-h-0">
           <ControlsPanel
             logs={logs}
             onTemplateUpload={handleTemplateUpload}
@@ -185,7 +185,7 @@ const Page: FC = () => {
           />
           <ContextViewer contextFile={selectedContextFile} />
         </div>
-        <div className="lg:col-span-2 mt-8 lg:mt-0">
+        <div className="lg:col-span-2 mt-8 lg:mt-0 h-full">
           <TemplateEditor
             content={templateContent}
           />
