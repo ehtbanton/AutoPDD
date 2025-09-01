@@ -32,21 +32,25 @@ sys.stderr.reconfigure(line_buffering=True)
 
 # --- 1. SETUP ---
 project_name = "prime_road"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
+
 
 # Create the single output document from the template if it doesn't exist yet
-# Adjusted paths to be relative to the script's execution directory
 output_path = create_output_doc_from_template(project_name)
-output_text = load_word_doc_to_string("../../auto_pdd_output")
+output_doc_folder = os.path.join(base_dir, "auto_pdd_output")
+output_text = load_word_doc_to_string(output_doc_folder)
 
 # Load the template's structure into a string for analysis and for generating prompts
-template_text = load_word_doc_to_string("../../pdd_template")
+template_doc_folder = os.path.join(base_dir, "pdd_template")
+template_text = load_word_doc_to_string(template_doc_folder)
 contents_list = retrieve_contents_list(template_text)
 pdd_targets = get_pdd_targets(contents_list)
 
-context_folder = f"../../provided_documents/{project_name}"
+context_folder = os.path.join(base_dir, "provided_documents", project_name)
 there_are_new_files = extract_text_from_folder(context_folder)
 GEMINI_CLIENT = setup_gemini()
-uploaded_files_cache = upload_files_to_gemini([f"{context_folder}/all_context.txt"])
+uploaded_files_cache = upload_files_to_gemini([os.path.join(context_folder, "all_context.txt")])
 
 # --- 2. MAIN PROCESSING LOOP ---
 for target_idx, target in enumerate(pdd_targets):
@@ -70,7 +74,8 @@ for target_idx, target in enumerate(pdd_targets):
     #print(f"Section:\n {output_text[output_start_loc:output_end_loc]}")
     
     response = None
-    section_status = output_text[output_start_loc:output_end_loc].split("\n")[2] if output_text and output_start_loc != -1 else ""
+    section_status = output_text[output_start_loc:output_end_loc].split("\n")[2] if output_text and output_start_loc != -1 and len(output_text[output_start_loc:output_end_loc].split("\n")) > 2 else ""
+
 
     if("SECTION_COMPLETE" in section_status):
         print(f"\nSection '{start_marker}' is already complete. Skipping...")

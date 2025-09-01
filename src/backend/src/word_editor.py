@@ -56,7 +56,12 @@ def load_word_doc_to_string(folder_path):
         return f"Error processing file '{os.path.basename(filename)}': {e}"
 
 def create_output_doc_from_template(project_name):
-    template_folder, output_folder = "../../pdd_template", "../../auto_pdd_output"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
+
+    template_folder = os.path.join(base_dir, "pdd_template")
+    output_folder = os.path.join(base_dir, "auto_pdd_output")
+    
     template_path = next((os.path.join(template_folder, f) for f in os.listdir(template_folder) if f.lower().endswith('.docx') and not f.startswith('~$')), None)
     
     if not template_path:

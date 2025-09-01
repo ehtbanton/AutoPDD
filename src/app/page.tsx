@@ -54,8 +54,7 @@ const Page: FC = () => {
           setTemplateContent(result.value);
           log(`Template "${file.name}" uploaded successfully.`);
           
-          // This is a bit of a hack to simulate a file path for the backend
-          setTemplatePath("pdd_template");
+          setTemplatePath(file.name);
 
           toast({
               title: "Upload Successful",
@@ -101,7 +100,9 @@ const Page: FC = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as ArrayBuffer;
-        const newFile = { name: file.name, content: content.slice(0) };
+        // IMPORTANT: Create a copy of the ArrayBuffer
+        const contentCopy = content.slice(0);
+        const newFile = { name: file.name, content: contentCopy };
         newFiles.push(newFile);
         
         log(`Successfully processed "${file.name}".`);
