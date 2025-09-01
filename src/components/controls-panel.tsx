@@ -17,6 +17,9 @@ interface ControlsPanelProps {
   contextFiles: ContextFile[];
   selectedContextFile: ContextFile | undefined;
   onContextSelect: (fileName: string) => void;
+  onFillDocument: () => void;
+  isProcessing: boolean;
+  onStop: () => void;
 }
 
 export function ControlsPanel({
@@ -26,6 +29,9 @@ export function ControlsPanel({
   contextFiles,
   selectedContextFile,
   onContextSelect,
+  onFillDocument,
+  isProcessing,
+  onStop,
 }: ControlsPanelProps) {
   return (
     <Card>
@@ -34,7 +40,7 @@ export function ControlsPanel({
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         <div className="space-y-2">
-            <h3 className="text-sm font-medium mb-1">Upload Documents</h3>
+            <h3 className="text-sm font-medium mb-1">1. Upload Documents</h3>
             <div className="grid grid-cols-2 gap-2">
                 <FileUploadButton
                     onFileSelect={(file) => onTemplateUpload(file as File)}
@@ -48,6 +54,7 @@ export function ControlsPanel({
                     onFileSelect={(files) => onContextUpload(files as FileList)}
                     variant="outline"
                     multiple
+                    accept=".pdf"
                     size="sm"
                 >
                     <File className="mr-2 h-2 w-2" /> Contexts
@@ -56,7 +63,7 @@ export function ControlsPanel({
         </div>
         
         <div className="space-y-2">
-            <h3 className="text-sm font-medium mb-1">Select Context File</h3>
+            <h3 className="text-sm font-medium mb-1">2. Select Context File (Optional)</h3>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="w-full justify-between" disabled={contextFiles.length === 0}>
@@ -72,6 +79,28 @@ export function ControlsPanel({
                     ))}
                 </DropdownMenuContent>
             </DropdownMenu>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium mb-1">3. Process Document</h3>
+          {isProcessing ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="sm" disabled>
+                Processing...
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onStop}
+              >
+                Stop
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={onFillDocument} size="sm" className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+              Fill Document
+            </Button>
+          )}
         </div>
 
         <Separator />

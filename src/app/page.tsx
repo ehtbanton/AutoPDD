@@ -2,13 +2,13 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
 import mammoth from "mammoth";
-import * as pdfjs from 'pdfjs-dist';
+import { runPythonBackend } from '@/app/actions';
 
 export type ContextFile = {
   name: string;
@@ -30,10 +30,15 @@ const Page: FC = () => {
   const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const processingRef = useRef<boolean>(false);
+  const [templatePath, setTemplatePath] = useState<string>('');
+
 
   const log = useCallback((message: string) => {
-    console.log(message);
-    setLogs((prevLogs) => [...prevLogs, `[${new Date().toLocaleTimeString()}] ${message}`]);
+    const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
+    setLogs((prevLogs) => [...prevLogs, timedMessage]);
+    console.log(timedMessage);
   }, []);
   
   useEffect(() => {
@@ -48,6 +53,10 @@ const Page: FC = () => {
         .then(result => {
           setTemplateContent(result.value);
           log(`Template "${file.name}" uploaded successfully.`);
+          
+          // This is a bit of a hack to simulate a file path for the backend
+          setTemplatePath("pdd_template");
+
           toast({
               title: "Upload Successful",
               description: `Template "${file.name}" has been loaded.`,
@@ -92,7 +101,9 @@ const Page: FC = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as ArrayBuffer;
-        newFiles.push({ name: file.name, content });
+        const newFile = { name: file.name, content: content.slice(0) };
+        newFiles.push(newFile);
+        
         log(`Successfully processed "${file.name}".`);
         
         processedCount++;
@@ -103,9 +114,9 @@ const Page: FC = () => {
                     const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
                     if (existingIndex !== -1) {
                         log(`Replacing existing file: "${newFile.name}"`);
-                        updatedFiles[existingIndex] = newFile; // Replace existing
+                        updatedFiles[existingIndex] = newFile;
                     } else {
-                        updatedFiles.push(newFile); // Add new
+                        updatedFiles.push(newFile);
                     }
                 });
                 return updatedFiles;
@@ -162,6 +173,64 @@ const Page: FC = () => {
     }
   }
 
+  const handleFillDocument = async () => {
+    if (!templatePath) {
+        log("Error: Please upload a template document first.");
+        toast({
+            title: "Template Missing",
+            description: "You must upload a template .docx file before filling the document.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    log("Starting document processing with Python backend...");
+    setIsProcessing(true);
+    processingRef.current = true;
+
+    try {
+        const stream = await runPythonBackend();
+        const reader = stream.getReader();
+        const decoder = new TextDecoder();
+
+        while (processingRef.current) {
+            const { value, done } = await reader.read();
+            if (done) {
+                log("Python script finished.");
+                break;
+            }
+            const decodedChunk = decoder.decode(value, { stream: true });
+            // The script outputs can be messy, let's clean it up a bit.
+            const lines = decodedChunk.split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+                log(line);
+            }
+        }
+        if(!processingRef.current) {
+            log("Processing stopped by user.");
+        }
+
+    } catch (error) {
+        console.error("Error running python backend: ", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log(`Error: ${errorMessage}`);
+        toast({
+            title: "Backend Error",
+            description: "The Python script failed to run. Check the console for details.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsProcessing(false);
+        processingRef.current = false;
+    }
+};
+
+  const handleStop = () => {
+    log("Stop button pressed. Attempting to stop processing...");
+    processingRef.current = false; // This will signal the loop to stop
+    // Note: The python process itself is not killed here, just the client-side listening.
+    // For true process killing, a more complex setup would be needed.
+  };
 
   return (
     <main className="h-full flex flex-col p-4 gap-4">
@@ -183,6 +252,9 @@ const Page: FC = () => {
             contextFiles={contextFiles}
             selectedContextFile={selectedContextFile}
             onContextSelect={handleContextSelect}
+            onFillDocument={handleFillDocument}
+            isProcessing={isProcessing}
+            onStop={handleStop}
           />
           <ContextViewer contextFile={selectedContextFile} />
         </div>
