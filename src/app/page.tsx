@@ -7,8 +7,7 @@ import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
-import mammoth from "mammoth";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getOutputFileAsHtml } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getOutputFileAsHtml, getExistingContextFiles, getTemplateName } from '@/app/actions';
 
 export type ContextFile = {
   name: string;
@@ -42,10 +41,6 @@ const Page: FC = () => {
     console.log(timedMessage);
   }, []);
   
-  useEffect(() => {
-    setLogs(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
-  }, []);
-
   const updateOutputViewer = useCallback(async () => {
     try {
         const html = await getOutputFileAsHtml();
@@ -57,6 +52,38 @@ const Page: FC = () => {
         console.warn("Could not fetch output file HTML", error);
     }
   }, []);
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+        log("Checking for existing files...");
+
+        // Check for output file
+        await updateOutputViewer();
+
+        // Check for template file
+        const templateName = await getTemplateName();
+        if (templateName) {
+            setTemplatePath(templateName);
+            log(`Found existing template: "${templateName}"`);
+        }
+        
+        // Check for context files
+        const existingContexts = await getExistingContextFiles();
+        if (existingContexts.length > 0) {
+            const files: ContextFile[] = existingContexts.map(f => {
+                const buffer = Buffer.from(f.content, 'base64');
+                return { name: f.name, content: buffer.buffer as ArrayBuffer };
+            });
+            setContextFiles(files);
+            setSelectedContextFile(files[0]);
+            log(`Loaded ${files.length} existing context file(s).`);
+        }
+    };
+    
+    setLogs(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
+    loadInitialData();
+  }, [log, updateOutputViewer]);
+
 
 
   const handleTemplateUpload = async (file: File) => {

@@ -103,3 +103,37 @@ export async function getOutputFileAsHtml(): Promise<string | null> {
         return null; // Return null if file doesn't exist or there's an error
     }
 }
+
+export async function getExistingContextFiles(): Promise<{ name: string; content: string }[]> {
+    try {
+        await ensureDir(UPLOAD_DIR_CONTEXT);
+        const files = await fs.readdir(UPLOAD_DIR_CONTEXT);
+        const contextFiles = [];
+        for (const file of files) {
+            if (path.extname(file).toLowerCase() === '.pdf') {
+                const filePath = path.join(UPLOAD_DIR_CONTEXT, file);
+                const fileContent = await fs.readFile(filePath);
+                contextFiles.push({
+                    name: file,
+                    content: fileContent.toString('base64'),
+                });
+            }
+        }
+        return contextFiles;
+    } catch (error) {
+        console.error("Error reading context files:", error);
+        return [];
+    }
+}
+
+export async function getTemplateName(): Promise<string | null> {
+    try {
+        await ensureDir(UPLOAD_DIR_TEMPLATE);
+        const files = await fs.readdir(UPLOAD_DIR_TEMPLATE);
+        const templateFile = files.find(file => path.extname(file).toLowerCase() === '.docx');
+        return templateFile || null;
+    } catch (error) {
+        console.error("Error reading template directory:", error);
+        return null;
+    }
+}
