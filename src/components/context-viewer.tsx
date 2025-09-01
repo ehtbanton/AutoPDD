@@ -53,8 +53,8 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
         if (isLoading) {
             return (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                    <Loader className="w-16 h-16 mb-4 animate-spin" />
-                    <p>Rendering PDF...</p>
+                    <Loader className="w-12 h-12 mb-4 animate-spin" />
+                    <p className="text-sm">Rendering PDF...</p>
                 </div>
             );
         }
@@ -63,8 +63,8 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
         }
         return (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <FileQuestion className="w-16 h-16 mb-4" />
-                <p>No context file selected.</p>
+                <FileQuestion className="w-12 h-12 mb-2" />
+                <p className="text-sm">No context file selected.</p>
                 <p className="text-xs">Upload or select a file to view its content.</p>
             </div>
         );
