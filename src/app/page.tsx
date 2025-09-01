@@ -96,7 +96,20 @@ const Page: FC = () => {
         
         processedCount++;
         if (processedCount === fileArray.length) {
-          setContextFiles(prev => [...prev, ...newFiles]);
+            setContextFiles(prevFiles => {
+                const updatedFiles = [...prevFiles];
+                newFiles.forEach(newFile => {
+                    const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
+                    if (existingIndex !== -1) {
+                        log(`Replacing existing file: "${newFile.name}"`);
+                        updatedFiles[existingIndex] = newFile; // Replace existing
+                    } else {
+                        updatedFiles.push(newFile); // Add new
+                    }
+                });
+                return updatedFiles;
+            });
+
           if (!selectedContextFile || contextFiles.length === 0) {
             setSelectedContextFile(newFiles[0]);
           }
@@ -117,14 +130,24 @@ const Page: FC = () => {
             variant: "destructive",
         });
         processedCount++;
-        if (processedCount === fileArray.length) {
-          if (newFiles.length > 0) {
-            setContextFiles(prev => [...prev, ...newFiles]);
+        if (processedCount === fileArray.length && newFiles.length > 0) {
+            setContextFiles(prevFiles => {
+                const updatedFiles = [...prevFiles];
+                newFiles.forEach(newFile => {
+                    const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
+                    if (existingIndex !== -1) {
+                        log(`Replacing existing file: "${newFile.name}"`);
+                        updatedFiles[existingIndex] = newFile;
+                    } else {
+                        updatedFiles.push(newFile);
+                    }
+                });
+                return updatedFiles;
+            });
             if (!selectedContextFile || contextFiles.length === 0) {
               setSelectedContextFile(newFiles[0]);
             }
           }
-        }
       }
       reader.readAsArrayBuffer(file);
     });
