@@ -9,10 +9,12 @@ import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
 import mammoth from "mammoth";
 import * as pdfjs from 'pdfjs-dist';
+import { fillSection } from '@/ai/flows/fill-section-flow';
 
 export type ContextFile = {
   name: string;
   content: ArrayBuffer;
+  textContent: string;
 };
 
 const initialTemplateContent = ``;
@@ -24,12 +26,31 @@ const initialLogs = [
   'Upload a Word document as a template and PDF files for context.',
 ];
 
+// Helper to find all indices of a substring
+const getIndicesOf = (searchStr: string, str: string) => {
+    const searchStrLen = searchStr.length;
+    if (searchStrLen === 0) {
+        return [];
+    }
+    let startIndex = 0;
+    let index;
+    const indices = [];
+    while ((index = str.indexOf(searchStr, startIndex)) > -1) {
+        indices.push(index);
+        startIndex = index + searchStrLen;
+    }
+    return indices;
+};
+
+
 const Page: FC = () => {
   const [templateContent, setTemplateContent] = useState<string>(initialTemplateContent);
+  const [templateText, setTemplateText] = useState<string>('');
   const [contextFiles, setContextFiles] = useState<ContextFile[]>(initialContextFiles);
   const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const log = useCallback((message: string) => {
     console.log(message);
@@ -64,6 +85,11 @@ const Page: FC = () => {
                 variant: "destructive",
             });
         });
+      
+      mammoth.extractRawText({arrayBuffer: arrayBuffer})
+        .then(result => {
+            setTemplateText(result.value);
+        });
     };
     reader.onerror = () => {
         log(`Error reading file: ${file.name}`);
@@ -90,9 +116,21 @@ const Page: FC = () => {
   
     fileArray.forEach(file => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const content = e.target?.result as ArrayBuffer;
-        newFiles.push({ name: file.name, content });
+        
+        // Extract text from PDF
+        const loadingTask = pdfjs.getDocument(new Uint8Array(content));
+        const pdf = await loadingTask.promise;
+        const numPages = pdf.numPages;
+        let textContent = '';
+        for (let i = 1; i <= numPages; i++) {
+            const page = await pdf.getPage(i);
+            const pageTextContent = await page.getTextContent();
+            textContent += pageTextContent.items.map((item: any) => item.str).join(' ');
+        }
+
+        newFiles.push({ name: file.name, content, textContent });
         log(`Successfully processed "${file.name}".`);
         
         processedCount++;
@@ -162,6 +200,143 @@ const Page: FC = () => {
     }
   }
 
+  const retrieveContentsList = (text: string) => {
+    const contentsStart = text.indexOf("Contents");
+    const appendixStart = text.indexOf("Appendix");
+    if (contentsStart === -1 || appendixStart === -1) {
+        return "";
+    }
+    return text.substring(contentsStart, appendixStart).trim();
+  };
+
+  const getPddTargets = (contentsList: string) => {
+      const targets: { sectionHeading: string, subheading: string, subheadingIdx: string, pageNum: string }[] = [];
+      let sectionHeading = "";
+      contentsList.split('\n').forEach(line => {
+          if (line.trim() && !line.startsWith("Contents")) {
+              const parts = line.split(/\s+/);
+              if (parts.length > 2) {
+                  if (!/^\d/.test(parts[0])) {
+                      sectionHeading = parts.slice(1, -1).join(" ");
+                  } else {
+                      const subheading = parts.slice(1, -1).join(" ");
+                      const subheadingIdx = parts[0];
+                      const pageNum = parts[parts.length - 1];
+                      targets.push({ sectionHeading, subheading, subheadingIdx, pageNum });
+                  }
+              }
+          }
+      });
+      return targets;
+  };
+  
+  const handleFillDocument = async () => {
+    if (!templateText) {
+        log("Please upload a template document first.");
+        toast({ title: "Missing Template", description: "Upload a template before filling.", variant: "destructive" });
+        return;
+    }
+    if (contextFiles.length === 0) {
+        log("Please upload context documents first.");
+        toast({ title: "Missing Context", description: "Upload context files before filling.", variant: "destructive" });
+        return;
+    }
+
+    setIsProcessing(true);
+    log("Starting document filling process...");
+
+    const allContextText = contextFiles.map(f => `DOCUMENT: ${f.name}\n\n${f.textContent}`).join('\n\n---\n\n');
+    const contentsList = retrieveContentsList(templateText);
+    const pddTargets = getPddTargets(contentsList);
+    
+    let currentHtml = templateContent;
+
+    for (let i = 0; i < pddTargets.length; i++) {
+        const target = pddTargets[i];
+        const startMarker = target.subheading;
+        const endMarker = (i + 1 < pddTargets.length) ? pddTargets[i + 1].subheading : "Appendix";
+
+        log(`Processing section: ${startMarker}`);
+        
+        const startIndices = getIndicesOf(startMarker, templateText);
+        let startLoc = -1;
+        
+        // Find the correct start location by checking for surrounding newlines
+        for(const index of startIndices) {
+            const before = templateText.charAt(index - 1);
+            const after = templateText.charAt(index + startMarker.length);
+            if((before === '\n' || before === '') && (after === '\n' || after === '')) {
+                startLoc = index;
+                break;
+            }
+        }
+        if (startLoc === -1) { // Fallback to first occurrence
+            startLoc = templateText.indexOf(startMarker);
+        }
+
+        const endIndices = getIndicesOf(endMarker, templateText);
+        let endLoc = -1;
+        for(const index of endIndices) {
+            const before = templateText.charAt(index - 1);
+            const after = templateText.charAt(index + endMarker.length);
+             if((before === '\n' || before === '') && (after === '\n' || after === '')) {
+                endLoc = index;
+                break;
+            }
+        }
+        if (endLoc === -1) { // Fallback
+            endLoc = templateText.indexOf(endMarker, startLoc);
+        }
+        
+        if (startLoc === -1) {
+            log(`Could not find start marker for section: ${startMarker}`);
+            continue;
+        }
+
+        const infillingInfo = endLoc !== -1 ? templateText.substring(startLoc, endLoc) : templateText.substring(startLoc);
+        
+        try {
+            const result = await fillSection({
+                infillingInfo: infillingInfo,
+                context: allContextText
+            });
+
+            if (result && result.filledSection) {
+                 // To avoid replacing the wrong thing, we need to convert the plain text back to something that can be found in the HTML
+                const originalHtmlSection = await mammoth.convert({
+                    arrayBuffer: new TextEncoder().encode(infillingInfo).buffer
+                }).then(r => r.value);
+                
+                const newHtmlSection = await mammoth.convert({
+                    arrayBuffer: new TextEncoder().encode(result.filledSection).buffer
+                }).then(r => r.value);
+
+                // A bit of a hack to replace only the content inside the heading tag
+                const startTag = `<h2>${startMarker}</h2>`;
+                const endTag = `<h2>${endMarker}</h2>`;
+                
+                const sectionToReplace = currentHtml.substring(currentHtml.indexOf(startTag), currentHtml.indexOf(endTag, currentHtml.indexOf(startTag)));
+                const newSection = newHtmlSection;
+
+                // A simple replace might be too greedy if markers appear multiple times
+                // So, let's create a more robust replacement strategy later if needed.
+                // For now, let's try a simple replace.
+                currentHtml = currentHtml.replace(sectionToReplace, newSection);
+
+                setTemplateContent(currentHtml);
+                log(`Successfully filled section: ${startMarker}`);
+            } else {
+                log(`Failed to fill section: ${startMarker}. No response from AI.`);
+            }
+        } catch (error) {
+            log(`Error filling section ${startMarker}: ${error}`);
+            toast({ title: "AI Error", description: `Failed to process section: ${startMarker}`, variant: "destructive" });
+        }
+    }
+
+    log("Document filling process complete.");
+    setIsProcessing(false);
+  };
 
   return (
     <main className="h-full flex flex-col p-4 gap-4">
@@ -183,6 +358,8 @@ const Page: FC = () => {
             contextFiles={contextFiles}
             selectedContextFile={selectedContextFile}
             onContextSelect={handleContextSelect}
+            onFillDocument={handleFillDocument}
+            isProcessing={isProcessing}
           />
           <ContextViewer contextFile={selectedContextFile} />
         </div>
@@ -197,3 +374,5 @@ const Page: FC = () => {
 };
 
 export default Page;
+
+    

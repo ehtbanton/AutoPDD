@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ConsoleOutput } from './console-output';
 import { FileUploadButton } from './file-upload-button';
-import { FileUp, File, ChevronDown } from 'lucide-react';
+import { FileUp, File, ChevronDown, Wand2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Button } from './ui/button';
 import type { ContextFile } from '@/app/page';
@@ -17,6 +17,8 @@ interface ControlsPanelProps {
   contextFiles: ContextFile[];
   selectedContextFile: ContextFile | undefined;
   onContextSelect: (fileName: string) => void;
+  onFillDocument: () => void;
+  isProcessing: boolean;
 }
 
 export function ControlsPanel({
@@ -26,13 +28,15 @@ export function ControlsPanel({
   contextFiles,
   selectedContextFile,
   onContextSelect,
+  onFillDocument,
+  isProcessing,
 }: ControlsPanelProps) {
   return (
     <Card>
-      <CardHeader className="p-4">
+      <CardHeader className="p-4 pb-2">
         <CardTitle className="font-headline text-xl">Controls</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-0">
+      <CardContent className="space-y-3 p-4 pt-0">
         <div className="space-y-2">
             <h3 className="text-sm font-medium mb-1">Upload Documents</h3>
             <div className="grid grid-cols-2 gap-2">
@@ -48,6 +52,7 @@ export function ControlsPanel({
                     onFileSelect={(files) => onContextUpload(files as FileList)}
                     variant="outline"
                     multiple
+                    accept=".pdf"
                     size="sm"
                 >
                     <File className="mr-2 h-2 w-2" /> Contexts
@@ -73,6 +78,11 @@ export function ControlsPanel({
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>
+        
+        <Button onClick={onFillDocument} disabled={isProcessing} className="w-full" size="sm">
+            <Wand2 className="mr-2 h-4 w-4" />
+            {isProcessing ? 'Processing...' : 'Fill Document'}
+        </Button>
 
         <Separator />
 
@@ -81,3 +91,5 @@ export function ControlsPanel({
     </Card>
   );
 }
+
+    
