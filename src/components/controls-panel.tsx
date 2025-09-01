@@ -5,18 +5,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ConsoleOutput } from './console-output';
 import { FileUploadButton } from './file-upload-button';
-import { FileUp, File } from 'lucide-react';
+import { FileUp, File, ChevronDown } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Button } from './ui/button';
+import type { ContextFile } from '@/app/page';
 
 interface ControlsPanelProps {
   logs: string[];
   onTemplateUpload: (file: File) => void;
-  onContextUpload: (file: File) => void;
+  onContextUpload: (files: FileList) => void;
+  contextFiles: ContextFile[];
+  selectedContextFile: ContextFile | undefined;
+  onContextSelect: (fileName: string) => void;
 }
 
 export function ControlsPanel({
   logs,
   onTemplateUpload,
   onContextUpload,
+  contextFiles,
+  selectedContextFile,
+  onContextSelect,
 }: ControlsPanelProps) {
   return (
     <Card>
@@ -35,13 +44,33 @@ export function ControlsPanel({
                     <FileUp className="mr-2 h-4 w-4" /> Template
                 </FileUploadButton>
                 <FileUploadButton
-                    onFileSelect={(file) => onContextUpload(file as File)}
+                    onFileSelect={(files) => onContextUpload(files as FileList)}
                     variant="outline"
-                    accept=".txt,.json,.yml"
+                    accept=".pdf"
+                    multiple
                 >
-                    <File className="mr-2 h-4 w-4" /> Context
+                    <File className="mr-2 h-4 w-4" /> Contexts
                 </FileUploadButton>
             </div>
+        </div>
+        
+        <div className="space-y-4">
+            <h3 className="text-sm font-medium">Select Context File</h3>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                        <span>{selectedContextFile?.name || "Select a file"}</span>
+                        <ChevronDown className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                    {contextFiles.map((file) => (
+                        <DropdownMenuItem key={file.name} onSelect={() => onContextSelect(file.name)}>
+                            {file.name}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
 
         <Separator />

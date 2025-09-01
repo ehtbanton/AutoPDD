@@ -30,19 +30,22 @@ const initialTemplateContent = `
 <p class="mb-4">The estimated total cost for the project is {{project_cost}}. A detailed breakdown is available in the attached financial statement.</p>
 `;
 
-const initialContextFile: ContextFile = {
-    name: 'project_data.txt',
-    content: `contact_person: Jane Doe\nend_date: Q4 2024\nproject_cost: $250,000`,
-};
+const initialContextFiles: ContextFile[] = [
+    {
+        name: 'project_data.txt',
+        content: `contact_person: Jane Doe\nend_date: Q4 2024\nproject_cost: $250,000`,
+    }
+];
 
 const initialLogs = [
   'Welcome to Context Editor!',
-  'Upload a Word document as a template or a text file for context.',
+  'Upload a Word document as a template or PDF files for context.',
 ];
 
 const Page: FC = () => {
   const [templateContent, setTemplateContent] = useState<string>(initialTemplateContent);
-  const [contextFile, setContextFile] = useState<ContextFile | undefined>(initialContextFile);
+  const [contextFiles, setContextFiles] = useState<ContextFile[]>(initialContextFiles);
+  const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(initialContextFiles[0]);
   const [logs, setLogs] = useState<string[]>([]);
   const { toast } = useToast();
 
@@ -91,29 +94,53 @@ const Page: FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleContextUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setContextFile({ name: file.name, content });
-      log(`Context file "${file.name}" uploaded successfully.`);
-      toast({
-          title: "Upload Successful",
-          description: `Context file "${file.name}" has been loaded.`,
-          variant: "default",
-          className: "bg-accent text-accent-foreground",
-      });
-    };
-    reader.onerror = () => {
-      log(`Error reading file: ${file.name}`);
-      toast({
-          title: "Upload Failed",
-          description: `There was an error reading "${file.name}".`,
-          variant: "destructive",
-      });
-    }
-    reader.readAsText(file);
+  const handleContextUpload = (files: FileList) => {
+    const newFiles: ContextFile[] = [];
+    let processedCount = 0;
+
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target?.result as string;
+            newFiles.push({ name: file.name, content });
+            processedCount++;
+            if (processedCount === files.length) {
+                setContextFiles(prev => [...prev, ...newFiles]);
+                if (!selectedContextFile) {
+                    setSelectedContextFile(newFiles[0]);
+                }
+                log(`${files.length} context file(s) uploaded successfully.`);
+                toast({
+                    title: "Upload Successful",
+                    description: `${files.length} context file(s) have been loaded.`,
+                    variant: "default",
+                    className: "bg-accent text-accent-foreground",
+                });
+            }
+        };
+        reader.onerror = () => {
+          log(`Error reading file: ${file.name}`);
+          toast({
+              title: "Upload Failed",
+              description: `There was an error reading "${file.name}".`,
+              variant: "destructive",
+          });
+          processedCount++;
+        }
+        // For simplicity, reading PDFs as text.
+        // A real implementation would require a PDF parsing library.
+        reader.readAsText(file);
+    });
   };
+  
+  const handleContextSelect = (fileName: string) => {
+    const file = contextFiles.find(f => f.name === fileName);
+    setSelectedContextFile(file);
+    if(file) {
+        log(`Context file "${fileName}" selected.`);
+    }
+  }
+
 
   return (
     <main className="min-h-screen p-4 sm:p-6 lg:p-8">
@@ -132,8 +159,11 @@ const Page: FC = () => {
             logs={logs}
             onTemplateUpload={handleTemplateUpload}
             onContextUpload={handleContextUpload}
+            contextFiles={contextFiles}
+            selectedContextFile={selectedContextFile}
+            onContextSelect={handleContextSelect}
           />
-          <ContextViewer contextFile={contextFile} />
+          <ContextViewer contextFile={selectedContextFile} />
         </div>
         <div className="lg:col-span-2 mt-8 lg:mt-0">
           <TemplateEditor
