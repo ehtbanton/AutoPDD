@@ -11,7 +11,7 @@ import mammoth from "mammoth";
 
 export type ContextFile = {
   name: string;
-  content: string;
+  content: ArrayBuffer;
 };
 
 const initialTemplateContent = ``;
@@ -90,7 +90,7 @@ const Page: FC = () => {
     fileArray.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const content = e.target?.result as string;
+        const content = e.target?.result as ArrayBuffer;
         newFiles.push({ name: file.name, content });
         log(`Successfully processed "${file.name}".`);
         
@@ -126,7 +126,7 @@ const Page: FC = () => {
           }
         }
       }
-      reader.readAsDataURL(file);
+      reader.readAsArrayBuffer(file);
     });
   };
   

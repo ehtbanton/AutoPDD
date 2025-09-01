@@ -1,4 +1,5 @@
 import type {NextConfig} from 'next';
+import path from 'path';
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -23,6 +24,14 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+  },
+  webpack: (config) => {
+    // Required for pdfjs-dist
+    config.resolve.alias['pdfjs-dist'] = path.join(
+      __dirname,
+      'node_modules/pdfjs-dist/legacy/build/pdf.js'
+    );
+    return config;
   },
 };
 
