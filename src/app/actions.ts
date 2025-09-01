@@ -57,12 +57,13 @@ export async function uploadContextFile(fileName: string, fileContentBase64: str
 export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
     
     await ensureDir(UPLOAD_DIR_OUTPUT);
+    let pythonProcess: import('child_process').ChildProcess | null = null;
 
     const stream = new ReadableStream({
         start(controller) {
             const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', '___main.py');
             
-            const pythonProcess = spawn('python', [pythonScriptPath], {
+            pythonProcess = spawn('python', [pythonScriptPath], {
                 cwd: path.join(process.cwd(), 'src', 'backend', 'src'),
                 shell: true 
             });
@@ -85,6 +86,11 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
             pythonProcess.on('error', (err) => {
                 controller.error(err);
             });
+        },
+        cancel() {
+            if (pythonProcess) {
+                pythonProcess.kill();
+            }
         }
     });
 
@@ -95,12 +101,33 @@ export async function getOutputFileAsHtml(): Promise<string | null> {
     const outputFilePath = path.join(UPLOAD_DIR_OUTPUT, OUTPUT_FILE_NAME);
     try {
         await fs.access(outputFilePath); // Check if file exists
+    } catch (error) {
+        // Output file doesn't exist, let's see if we can create it from a template
+        try {
+            const templateName = await getTemplateName();
+            if (templateName) {
+                const templateFilePath = path.join(UPLOAD_DIR_TEMPLATE, templateName);
+                await ensureDir(UPLOAD_DIR_OUTPUT);
+                await fs.copyFile(templateFilePath, outputFilePath);
+                console.log("Created output file from existing template.");
+            } else {
+                 // No template, so no output file can exist yet.
+                return null;
+            }
+        } catch (creationError) {
+             console.error("Error creating output file from template:", creationError);
+             return null;
+        }
+    }
+
+    // Now, try to read the file (it should exist at this point if a template was found)
+    try {
         const arrayBuffer = await fs.readFile(outputFilePath);
         const result = await mammoth.convertToHtml({ buffer: arrayBuffer });
         return result.value;
-    } catch (error) {
-        console.error("Error reading or converting output file:", error);
-        return null; // Return null if file doesn't exist or there's an error
+    } catch (readError) {
+        console.error("Error reading or converting output file:", readError);
+        return null;
     }
 }
 
@@ -137,3 +164,4 @@ export async function getTemplateName(): Promise<string | null> {
         return null;
     }
 }
+

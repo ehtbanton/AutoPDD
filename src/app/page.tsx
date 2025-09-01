@@ -33,6 +33,7 @@ const Page: FC = () => {
   const processingRef = useRef<boolean>(false);
   const [templatePath, setTemplatePath] = useState<string>('');
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const streamReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
 
   const log = useCallback((message: string) => {
@@ -57,7 +58,7 @@ const Page: FC = () => {
     const loadInitialData = async () => {
         log("Checking for existing files...");
 
-        // Check for output file
+        // Check for output file (and create if needed from template)
         await updateOutputViewer();
 
         // Check for template file
@@ -244,6 +245,7 @@ const Page: FC = () => {
     try {
         const stream = await runPythonBackend();
         const reader = stream.getReader();
+        streamReaderRef.current = reader;
         const decoder = new TextDecoder();
 
         while (processingRef.current) {
@@ -274,6 +276,7 @@ const Page: FC = () => {
     } finally {
         setIsProcessing(false);
         processingRef.current = false;
+        streamReaderRef.current = null;
         if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
@@ -287,10 +290,14 @@ const Page: FC = () => {
   const handleStop = () => {
     log("Stop button pressed. Attempting to stop processing...");
     processingRef.current = false;
+    if (streamReaderRef.current) {
+        streamReaderRef.current.cancel();
+    }
     if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
     }
+    // No need to set isProcessing to false here, 'finally' block in handleFillDocument will do it.
   };
 
   return (
@@ -330,3 +337,4 @@ const Page: FC = () => {
 };
 
 export default Page;
+
