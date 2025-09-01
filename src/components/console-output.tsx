@@ -9,11 +9,15 @@ interface ConsoleOutputProps {
 }
 
 export function ConsoleOutput({ logs }: ConsoleOutputProps) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    if (viewportRef.current) {
+        // Find the viewport element inside the scroll area
+        const viewport = viewportRef.current.querySelector(':scope > div');
+        if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+        }
     }
   }, [logs]);
 
@@ -21,7 +25,7 @@ export function ConsoleOutput({ logs }: ConsoleOutputProps) {
     <div>
        <h3 className="text-sm font-medium mb-2">Console</h3>
       <Card className="h-48">
-        <ScrollArea className="h-full" ref={scrollAreaRef}>
+        <ScrollArea className="h-full" ref={viewportRef}>
           <CardContent className="p-4">
             <pre className="text-xs whitespace-pre-wrap">
               {logs.map((log, index) => (
