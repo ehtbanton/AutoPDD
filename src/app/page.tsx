@@ -14,27 +14,13 @@ export type ContextFile = {
   content: string;
 };
 
-const initialTemplateContent = `
-<h1 class="font-headline text-2xl font-bold mb-4">Project Proposal</h1>
-<p class="mb-2"><strong>Project Name:</strong> New Mobile Application</p>
-<p class="mb-2"><strong>Client:</strong> Global Tech Inc.</p>
-<p class="mb-4"><strong>Date:</strong> {{current_date}}</p>
-
-<h2 class="font-headline text-xl font-bold mb-2">1. Introduction</h2>
-<p class="mb-4">This document outlines the proposal for a new mobile application designed to enhance customer engagement and streamline service delivery for Global Tech Inc. The primary contact for this project will be {{contact_person}}.</p>
-
-<h2 class="font-headline text-xl font-bold mb-2">2. Project Scope</h2>
-<p class="mb-4">The project will involve the development of native iOS and Android applications. Key features will include user authentication, a product catalog, and an integrated support chat. The project is expected to be completed by {{end_date}}.</p>
-
-<h2 class="font-headline text-xl font-bold mb-2">3. Budget</h2>
-<p class="mb-4">The estimated total cost for the project is {{project_cost}}. A detailed breakdown is available in the attached financial statement.</p>
-`;
+const initialTemplateContent = ``;
 
 const initialContextFiles: ContextFile[] = [];
 
 const initialLogs = [
-  'Welcome to Context Editor!',
-  'Upload a Word document as a template or PDF files for context.',
+  'Welcome to AutoPDD!',
+  'Upload a Word document as a template and PDF files for context.',
 ];
 
 const Page: FC = () => {
@@ -157,10 +143,10 @@ const Page: FC = () => {
     <main className="min-h-screen p-4 sm:p-6 lg:p-8">
       <header className="mb-8 text-center lg:text-left">
         <h1 className="font-headline text-5xl font-bold text-primary">
-          Context Editor
+          AutoPDD
         </h1>
         <p className="mt-2 text-lg text-muted-foreground">
-          A simple interface to edit templates alongside their context.
+          Fill in your PDD automatically using a bundle of provided PDF files
         </p>
       </header>
 
