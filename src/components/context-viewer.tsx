@@ -19,20 +19,13 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col min-h-0">
-        <div className="flex-grow rounded-md border bg-muted/20 overflow-hidden">
+        <div className="flex-grow rounded-md border bg-muted/20 overflow-auto">
             {contextFile ? (
                 <iframe
                   src={contextFile.content}
                   title={contextFile.name}
-                  width="100%"
-                  height="100%"
-                  className="border-0"
-                >
-                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
-                    <p>Unable to display PDF.</p>
-                    <p className="text-xs text-center">Your browser may not support embedded PDFs, or the file may be corrupted.</p>
-                  </div>
-                </iframe>
+                  className="w-full h-full border-0"
+                />
             ) : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                     <FileQuestion className="w-16 h-16 mb-4" />
