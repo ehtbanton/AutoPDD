@@ -41,14 +41,14 @@ export function ControlsPanel({
                     variant="outline"
                     accept=".docx"
                 >
-                    <FileUp className="mr-2 h-4 w-4" /> Template
+                    <FileUp className="mr-2 h-3.5 w-3.5" /> Template
                 </FileUploadButton>
                 <FileUploadButton
                     onFileSelect={(files) => onContextUpload(files as FileList)}
                     variant="outline"
                     multiple
                 >
-                    <File className="mr-2 h-4 w-4" /> Contexts
+                    <File className="mr-2 h-3.5 w-3.5" /> Contexts
                 </FileUploadButton>
             </div>
         </div>
