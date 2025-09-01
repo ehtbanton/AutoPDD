@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,14 +30,14 @@ export function ControlsPanel({
                 <FileUploadButton
                     onFileSelect={(file) => onTemplateUpload(file as File)}
                     variant="outline"
-                    accept=".txt,.md,.html"
+                    accept=".docx"
                 >
                     <FileUp className="mr-2 h-4 w-4" /> Template
                 </FileUploadButton>
                 <FileUploadButton
                     onFileSelect={(file) => onContextUpload(file as File)}
                     variant="outline"
-                    accept=".txt,.json,.yml,.doc,.docx"
+                    accept=".txt,.json,.yml"
                 >
                     <File className="mr-2 h-4 w-4" /> Context
                 </FileUploadButton>

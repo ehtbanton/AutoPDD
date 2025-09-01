@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -6,6 +7,7 @@ import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
+import mammoth from "mammoth";
 
 export type ContextFile = {
   name: string;
@@ -35,7 +37,7 @@ const initialContextFile: ContextFile = {
 
 const initialLogs = [
   'Welcome to Context Editor!',
-  'Upload a new template or context files using the controls.',
+  'Upload a Word document as a template or a text file for context.',
 ];
 
 const Page: FC = () => {
@@ -56,15 +58,27 @@ const Page: FC = () => {
   const handleTemplateUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setTemplateContent(content);
-      log(`Template "${file.name}" uploaded successfully.`);
-      toast({
-          title: "Upload Successful",
-          description: `Template "${file.name}" has been loaded.`,
-          variant: "default",
-          className: "bg-accent text-accent-foreground",
-      });
+      const arrayBuffer = e.target?.result as ArrayBuffer;
+      mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+        .then(result => {
+          setTemplateContent(result.value);
+          log(`Template "${file.name}" uploaded successfully.`);
+          toast({
+              title: "Upload Successful",
+              description: `Template "${file.name}" has been loaded.`,
+              variant: "default",
+              className: "bg-accent text-accent-foreground",
+          });
+        })
+        .catch(error => {
+            console.error(error);
+            log(`Error processing Word document: ${file.name}`);
+            toast({
+                title: "Processing Failed",
+                description: "Could not process the Word document.",
+                variant: "destructive",
+            });
+        });
     };
     reader.onerror = () => {
         log(`Error reading file: ${file.name}`);
@@ -74,7 +88,7 @@ const Page: FC = () => {
             variant: "destructive",
         });
     }
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleContextUpload = (file: File) => {
@@ -124,7 +138,6 @@ const Page: FC = () => {
         <div className="lg:col-span-2 mt-8 lg:mt-0">
           <TemplateEditor
             content={templateContent}
-            onContentChange={setTemplateContent}
           />
         </div>
       </div>
