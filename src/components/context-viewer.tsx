@@ -79,7 +79,7 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col min-h-0 p-0 px-4 pb-4">
-        <ScrollArea className="flex-grow rounded-md border bg-white overflow-auto">
+        <ScrollArea className="flex-grow rounded-md border bg-white overflow-auto [&>div>div]:h-full [&>div>div>div]:h-full">
             {getDisplayContent()}
         </ScrollArea>
       </CardContent>

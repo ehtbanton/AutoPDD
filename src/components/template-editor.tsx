@@ -16,10 +16,10 @@ export function TemplateEditor({ content }: TemplateEditorProps) {
         <CardTitle className="font-headline text-xl">Template Document</CardTitle>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col min-h-0 p-0 px-4 pb-4">
-        <ScrollArea className="flex-grow rounded-md border p-4 bg-white">
+        <ScrollArea className="flex-grow rounded-md border bg-white [&>div>div]:h-full">
           {content ? (
             <div
-              className="prose max-w-none"
+              className="prose max-w-none p-4"
               dangerouslySetInnerHTML={{ __html: content }}
             />
           ) : (
