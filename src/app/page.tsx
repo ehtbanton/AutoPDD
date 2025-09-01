@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
@@ -51,6 +51,7 @@ const Page: FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
+  const processingRef = useRef(false);
 
   const log = useCallback((message: string) => {
     console.log(message);
@@ -244,6 +245,7 @@ const Page: FC = () => {
     }
 
     setIsProcessing(true);
+    processingRef.current = true;
     log("Starting document filling process...");
 
     const allContextText = contextFiles.map(f => `DOCUMENT: ${f.name}\n\n${f.textContent}`).join('\n\n---\n\n');
@@ -253,6 +255,11 @@ const Page: FC = () => {
     let currentHtml = templateContent;
 
     for (let i = 0; i < pddTargets.length; i++) {
+        if (!processingRef.current) {
+            log("Processing stopped by user.");
+            break;
+        }
+
         const target = pddTargets[i];
         const startMarker = target.subheading;
         const endMarker = (i + 1 < pddTargets.length) ? pddTargets[i + 1].subheading : "Appendix";
@@ -336,11 +343,13 @@ const Page: FC = () => {
     }
 
     log("Document filling process complete.");
+    processingRef.current = false;
     setIsProcessing(false);
   };
   
   const handleStop = () => {
     log("Stopping document filling process...");
+    processingRef.current = false;
     setIsProcessing(false);
   };
 
