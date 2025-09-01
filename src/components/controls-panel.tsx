@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ConsoleOutput } from './console-output';
 import { FileUploadButton } from './file-upload-button';
-import { FileUp, File, ChevronDown, Wand2 } from 'lucide-react';
+import { FileUp, File, ChevronDown, Wand2, Loader, XCircle } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Button } from './ui/button';
 import type { ContextFile } from '@/app/page';
@@ -19,6 +19,7 @@ interface ControlsPanelProps {
   onContextSelect: (fileName: string) => void;
   onFillDocument: () => void;
   isProcessing: boolean;
+  onStop: () => void;
 }
 
 export function ControlsPanel({
@@ -30,6 +31,7 @@ export function ControlsPanel({
   onContextSelect,
   onFillDocument,
   isProcessing,
+  onStop,
 }: ControlsPanelProps) {
   return (
     <Card>
@@ -79,10 +81,26 @@ export function ControlsPanel({
             </DropdownMenu>
         </div>
         
-        <Button onClick={onFillDocument} disabled={isProcessing} className="w-full" size="sm">
-            <Wand2 className="mr-2 h-4 w-4" />
-            {isProcessing ? 'Processing...' : 'Fill Document'}
-        </Button>
+        <div className="grid grid-cols-1 gap-2">
+            {!isProcessing ? (
+                <Button onClick={onFillDocument} className="w-full" size="sm">
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Fill Document
+                </Button>
+            ) : (
+                <div className="grid grid-cols-2 gap-2">
+                    <Button disabled className="w-full" size="sm" variant="secondary">
+                        <Loader className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                    </Button>
+                    <Button onClick={onStop} className="w-full" size="sm" variant="destructive">
+                        <XCircle className="mr-2 h-4 w-4" />
+                        Stop
+                    </Button>
+                </div>
+            )}
+        </div>
+
 
         <Separator />
 
@@ -91,5 +109,3 @@ export function ControlsPanel({
     </Card>
   );
 }
-
-    

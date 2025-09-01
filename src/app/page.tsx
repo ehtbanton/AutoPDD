@@ -338,6 +338,11 @@ const Page: FC = () => {
     log("Document filling process complete.");
     setIsProcessing(false);
   };
+  
+  const handleStop = () => {
+    log("Stopping document filling process...");
+    setIsProcessing(false);
+  };
 
   return (
     <main className="h-full flex flex-col p-4 gap-4 bg-background">
@@ -361,6 +366,7 @@ const Page: FC = () => {
             onContextSelect={handleContextSelect}
             onFillDocument={handleFillDocument}
             isProcessing={isProcessing}
+            onStop={handleStop}
           />
           <ContextViewer contextFile={selectedContextFile} />
         </div>
@@ -375,5 +381,3 @@ const Page: FC = () => {
 };
 
 export default Page;
-
-    
