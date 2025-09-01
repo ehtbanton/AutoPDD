@@ -9,9 +9,11 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
     const stream = new ReadableStream({
         start(controller) {
             const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', '___main.py');
-            const pythonProcess = spawn('python3', [pythonScriptPath], {
+            // Using 'python' and letting the system resolve it via file association is often more reliable on Windows.
+            const pythonProcess = spawn('python', [pythonScriptPath], {
                 // The python script needs to know where it is to find other files
                 cwd: path.join(process.cwd(), 'src', 'backend', 'src'),
+                shell: true // Using shell can help resolve paths correctly
             });
 
             pythonProcess.stdout.on('data', (data) => {
