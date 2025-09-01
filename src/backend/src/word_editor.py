@@ -25,14 +25,13 @@ def _iter_block_items(parent):
 
 def load_word_doc_to_string(folder_path):
     filename = None
+    if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+         return f"Error: Directory not found or is not a directory at '{folder_path}'"
     try:
-        if os.path.isdir(folder_path):
-            for f in os.listdir(folder_path):
-                if f.lower().endswith('.docx') and not f.startswith('~$'):
-                    filename = os.path.join(folder_path, f)
-                    break
-        elif os.path.isfile(folder_path) and folder_path.lower().endswith('.docx'):
-            filename = folder_path
+        for f in os.listdir(folder_path):
+            if f.lower().endswith('.docx') and not f.startswith('~$'):
+                filename = os.path.join(folder_path, f)
+                break
     except FileNotFoundError:
         return f"Error: Directory not found at '{folder_path}'"
     if not filename:
@@ -57,19 +56,21 @@ def load_word_doc_to_string(folder_path):
 
 def create_output_doc_from_template(project_name):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    base_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
+    # Go up 3 levels to reach project root from src/backend/src
+    base_dir = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
 
-    template_folder = os.path.join(base_dir, "pdd_template")
-    output_folder = os.path.join(base_dir, "auto_pdd_output")
+    template_folder = os.path.join(base_dir, "src", "pdd_template")
+    output_folder = os.path.join(base_dir, "src", "auto_pdd_output")
     
+    # Ensure template folder exists
+    if not os.path.isdir(template_folder):
+        os.makedirs(template_folder)
+        print(f"Created template directory: {template_folder}")
+        raise FileNotFoundError(f"Error: Template directory was missing. Please upload a template .docx file to this folder and try again.")
+
     template_path = next((os.path.join(template_folder, f) for f in os.listdir(template_folder) if f.lower().endswith('.docx') and not f.startswith('~$')), None)
     
     if not template_path:
-        # Before raising an error, let's create the directories if they don't exist.
-        if not os.path.exists(template_folder):
-            os.makedirs(template_folder)
-            print(f"Created template directory at: {template_folder}")
-            print("Please add your template .docx file to this folder.")
         raise FileNotFoundError(f"Error: No .docx template found in '{template_folder}'")
 
     if not os.path.exists(output_folder):
@@ -101,7 +102,11 @@ def _insert_content_from_document(source_doc, target_doc, anchor_element):
         if isinstance(block, docx.text.paragraph.Paragraph):
             # It's a paragraph - recreate it
             new_p = target_doc.add_paragraph(text=block.text, style=block.style)
-            cursor.addnext(new_p._element)
+            # This is a bit of a hack to insert after the cursor
+            if cursor.getnext() is not None:
+                cursor.getparent().insert(cursor.getparent().index(cursor) + 1, new_p._element)
+            else:
+                 cursor.addnext(new_p._element)
             cursor = new_p._element # Move the cursor
         
         elif isinstance(block, docx.table.Table):
@@ -118,7 +123,10 @@ def _insert_content_from_document(source_doc, target_doc, anchor_element):
                     target_cell = new_table.cell(r, c)
                     target_cell.text = source_cell.text
             
-            cursor.addnext(new_table._element)
+            if cursor.getnext() is not None:
+                 cursor.getparent().insert(cursor.getparent().index(cursor) + 1, new_table._element)
+            else:
+                 cursor.addnext(new_table._element)
             cursor = new_table._element # Move the cursor
 
 
@@ -170,10 +178,12 @@ def replace_section_in_word_doc(doc_path, start_marker, end_marker, new_content_
         # STEP 5: Perform the new, robust, high-level copy
         anchor = blocks[start_index]._element
         
+        # Add status paragraph
         status_p = main_doc.add_paragraph(status_line)
         anchor.addnext(status_p._element)
-        anchor_for_copy = status_p._element
 
+        # The new anchor for copying content is the status paragraph itself
+        anchor_for_copy = status_p._element
         _insert_content_from_document(temp_doc, main_doc, anchor_for_copy)
 
         main_doc.save(doc_path)

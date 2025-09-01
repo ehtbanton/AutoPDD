@@ -32,22 +32,28 @@ sys.stderr.reconfigure(line_buffering=True)
 
 # --- 1. SETUP ---
 project_name = "prime_road"
-script_dir = os.path.dirname(os.path.abspath(__file__))
-base_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
 
+# Correctly determine the base directory (the project root)
+# The script is in /src/backend/src, so we go up three levels.
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+
+# Use the root-level src directory for all paths
+template_doc_folder = os.path.join(base_dir, "src", "pdd_template")
+context_folder = os.path.join(base_dir, "src", "provided_documents", project_name)
+output_doc_folder = os.path.join(base_dir, "src", "auto_pdd_output")
 
 # Create the single output document from the template if it doesn't exist yet
 output_path = create_output_doc_from_template(project_name)
-output_doc_folder = os.path.join(base_dir, "auto_pdd_output")
+
+# Load the output document's current text
 output_text = load_word_doc_to_string(output_doc_folder)
 
 # Load the template's structure into a string for analysis and for generating prompts
-template_doc_folder = os.path.join(base_dir, "pdd_template")
 template_text = load_word_doc_to_string(template_doc_folder)
 contents_list = retrieve_contents_list(template_text)
 pdd_targets = get_pdd_targets(contents_list)
 
-context_folder = os.path.join(base_dir, "provided_documents", project_name)
 there_are_new_files = extract_text_from_folder(context_folder)
 GEMINI_CLIENT = setup_gemini()
 uploaded_files_cache = upload_files_to_gemini([os.path.join(context_folder, "all_context.txt")])
@@ -71,10 +77,13 @@ for target_idx, target in enumerate(pdd_targets):
 
     output_start_loc = find_target_location(target, output_text)
     output_end_loc = find_target_location(pdd_targets[target_idx + 1], output_text) if target_idx + 1 < len(pdd_targets) else -1
-    #print(f"Section:\n {output_text[output_start_loc:output_end_loc]}")
     
     response = None
-    section_status = output_text[output_start_loc:output_end_loc].split("\n")[2] if output_text and output_start_loc != -1 and len(output_text[output_start_loc:output_end_loc].split("\n")) > 2 else ""
+    section_status = ""
+    if output_text and output_start_loc != -1:
+        section_text = output_text[output_start_loc:output_end_loc]
+        if section_text and len(section_text.split("\n")) > 2:
+             section_status = section_text.split("\n")[2]
 
 
     if("SECTION_COMPLETE" in section_status):

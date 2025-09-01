@@ -8,7 +8,7 @@ import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
 import mammoth from "mammoth";
-import { runPythonBackend } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile } from '@/app/actions';
 
 export type ContextFile = {
   name: string;
@@ -45,42 +45,48 @@ const Page: FC = () => {
     setLogs(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
   }, []);
 
-  const handleTemplateUpload = (file: File) => {
+  const handleTemplateUpload = async (file: File) => {
+    log(`Uploading template "${file.name}"...`);
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const arrayBuffer = e.target?.result as ArrayBuffer;
-      mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
-        .then(result => {
-          setTemplateContent(result.value);
-          log(`Template "${file.name}" uploaded successfully.`);
-          
-          setTemplatePath(file.name);
+    reader.onload = async (e) => {
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        const buffer = Buffer.from(arrayBuffer);
 
-          toast({
-              title: "Upload Successful",
-              description: `Template "${file.name}" has been loaded.`,
-              variant: "default",
-              className: "bg-accent text-accent-foreground",
-          });
-        })
-        .catch(error => {
-            console.error(error);
-            log(`Error processing Word document: ${file.name}`);
+        try {
+            // Save the file on the server
+            await uploadTemplateFile(file.name, buffer.toString('base64'));
+
+            // Update the UI
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            setTemplateContent(result.value);
+            setTemplatePath(file.name);
+            log(`Template "${file.name}" uploaded successfully.`);
+
             toast({
-                title: "Processing Failed",
-                description: "Could not process the Word document.",
+                title: "Upload Successful",
+                description: `Template "${file.name}" has been loaded and saved.`,
+                variant: "default",
+                className: "bg-accent text-accent-foreground",
+            });
+        } catch (error) {
+            console.error("Template upload error:", error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error uploading template: ${errorMessage}`);
+            toast({
+                title: "Upload Failed",
+                description: "Could not save the template file on the server.",
                 variant: "destructive",
             });
-        });
+        }
     };
     reader.onerror = () => {
         log(`Error reading file: ${file.name}`);
         toast({
-            title: "Upload Failed",
+            title: "Read Failed",
             description: `There was an error reading "${file.name}".`,
             variant: "destructive",
         });
-    }
+    };
     reader.readAsArrayBuffer(file);
   };
 
@@ -88,7 +94,6 @@ const Page: FC = () => {
     log(`Attempting to upload ${files.length} context file(s)...`);
     const newFiles: ContextFile[] = [];
     let processedCount = 0;
-  
     const fileArray = Array.from(files);
   
     if (fileArray.length === 0) {
@@ -98,41 +103,62 @@ const Page: FC = () => {
   
     fileArray.forEach(file => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const content = e.target?.result as ArrayBuffer;
-        // IMPORTANT: Create a copy of the ArrayBuffer
-        const contentCopy = content.slice(0);
-        const newFile = { name: file.name, content: contentCopy };
-        newFiles.push(newFile);
         
-        log(`Successfully processed "${file.name}".`);
-        
+        try {
+            // Save file on the server
+            const buffer = Buffer.from(content);
+            await uploadContextFile(file.name, buffer.toString('base64'));
+            log(`Successfully uploaded and saved "${file.name}".`);
+
+            // Update UI state
+            const contentCopy = content.slice(0);
+            const newFile = { name: file.name, content: contentCopy };
+            newFiles.push(newFile);
+
+        } catch (error) {
+            console.error(`Error uploading context file "${file.name}":`, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error uploading file "${file.name}": ${errorMessage}`);
+            toast({
+                title: "Upload Failed",
+                description: `Could not save "${file.name}" on the server.`,
+                variant: "destructive",
+            });
+        }
+
         processedCount++;
         if (processedCount === fileArray.length) {
-            setContextFiles(prevFiles => {
-                const updatedFiles = [...prevFiles];
-                newFiles.forEach(newFile => {
-                    const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
-                    if (existingIndex !== -1) {
-                        log(`Replacing existing file: "${newFile.name}"`);
-                        updatedFiles[existingIndex] = newFile;
-                    } else {
-                        updatedFiles.push(newFile);
-                    }
+            if (newFiles.length > 0) {
+                setContextFiles(prevFiles => {
+                    const updatedFiles = [...prevFiles];
+                    newFiles.forEach(newFile => {
+                        const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
+                        if (existingIndex !== -1) {
+                            log(`Replacing existing file in UI: "${newFile.name}"`);
+                            updatedFiles[existingIndex] = newFile;
+                        } else {
+                            updatedFiles.push(newFile);
+                        }
+                    });
+                    return updatedFiles;
                 });
-                return updatedFiles;
-            });
 
-          if (!selectedContextFile || contextFiles.length === 0) {
-            setSelectedContextFile(newFiles[0]);
-          }
-          log(`${newFiles.length} context file(s) uploaded successfully.`);
-          toast({
-              title: "Upload Successful",
-              description: `${newFiles.length} context file(s) have been loaded.`,
-              variant: "default",
-              className: "bg-accent text-accent-foreground",
-          });
+                if (!selectedContextFile) {
+                    setSelectedContextFile(newFiles[0]);
+                }
+                
+                log(`${newFiles.length} context file(s) processed for UI.`);
+                toast({
+                    title: "Upload Complete",
+                    description: `${newFiles.length} context file(s) have been loaded.`,
+                    variant: "default",
+                    className: "bg-accent text-accent-foreground",
+                });
+            } else {
+                 log(`No new context files were successfully uploaded.`);
+            }
         }
       };
       reader.onerror = (error) => {
@@ -143,24 +169,6 @@ const Page: FC = () => {
             variant: "destructive",
         });
         processedCount++;
-        if (processedCount === fileArray.length && newFiles.length > 0) {
-            setContextFiles(prevFiles => {
-                const updatedFiles = [...prevFiles];
-                newFiles.forEach(newFile => {
-                    const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
-                    if (existingIndex !== -1) {
-                        log(`Replacing existing file: "${newFile.name}"`);
-                        updatedFiles[existingIndex] = newFile;
-                    } else {
-                        updatedFiles.push(newFile);
-                    }
-                });
-                return updatedFiles;
-            });
-            if (!selectedContextFile || contextFiles.length === 0) {
-              setSelectedContextFile(newFiles[0]);
-            }
-          }
       }
       reader.readAsArrayBuffer(file);
     });
@@ -234,7 +242,7 @@ const Page: FC = () => {
   };
 
   return (
-    <main className="h-full flex flex-col p-4 gap-4">
+    <main className="h-full flex flex-col p-4 gap-4 bg-background">
       <header className="text-center lg:text-left">
         <h1 className="font-headline text-5xl font-bold text-primary">
           AutoPDD

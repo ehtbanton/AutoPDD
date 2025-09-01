@@ -15,8 +15,10 @@ def setup_gemini():
     and initializes the generative model.
     """
     try:
-        # Load from .env file in the root of the project, not next to the script
-        dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '.env')
+        # Load from .env file in the root of the project
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+        dotenv_path = os.path.join(project_root, '.env')
         load_dotenv(dotenv_path=dotenv_path)
 
         api_key = os.getenv("GEMINI_API_KEY")
@@ -80,7 +82,8 @@ def upload_files_to_gemini(file_paths: List[str], max_upload_retries: int = 3) -
         if not success:
             print(f"FAILED to upload '{file_path}' after {max_upload_retries} attempts.")
             sys.stdout.flush()
-            exit()
+            # It's better to return None and let the caller handle it.
+            return None
             
     print("File cache created successfully.")
     sys.stdout.flush()
