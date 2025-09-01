@@ -186,7 +186,7 @@ const Page: FC = () => {
           />
           <ContextViewer contextFile={selectedContextFile} />
         </div>
-        <div className="lg:col-span-2 flex flex-col">
+        <div className="lg:col-span-2 flex flex-col min-h-0">
           <TemplateEditor
             content={templateContent}
           />
