@@ -281,6 +281,7 @@ const Page: FC = () => {
         // Final update after processing is finished
         log("Fetching final version of the document...");
         await updateOutputViewer();
+        log("Document processing complete.");
     }
 };
 

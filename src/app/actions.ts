@@ -1,4 +1,3 @@
-
 'use server';
 
 import { spawn } from 'child_process';
@@ -55,36 +54,55 @@ export async function uploadContextFile(fileName: string, fileContentBase64: str
 
 
 export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
-    
     await ensureDir(UPLOAD_DIR_OUTPUT);
 
     const stream = new ReadableStream({
         start(controller) {
             const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', '___main.py');
-            
-            const pythonProcess = spawn('python', [pythonScriptPath], {
-                cwd: path.join(process.cwd(), 'src', 'backend', 'src'),
-                shell: true 
-            });
+            const pythonCwd = path.join(process.cwd(), 'src', 'backend', 'src');
 
-            pythonProcess.stdout.on('data', (data) => {
-                controller.enqueue(new TextEncoder().encode(data.toString()));
-            });
+            const attemptSpawn = (command: string) => {
+                const pythonProcess = spawn(command, [pythonScriptPath], {
+                    cwd: pythonCwd,
+                    shell: true
+                });
 
-            pythonProcess.stderr.on('data', (data) => {
-                controller.enqueue(new TextEncoder().encode(`ERROR: ${data.toString()}`));
-            });
+                pythonProcess.stdout.on('data', (data) => {
+                    controller.enqueue(new TextEncoder().encode(data.toString()));
+                });
 
-            pythonProcess.on('close', (code) => {
-                if (code !== 0) {
-                    controller.enqueue(new TextEncoder().encode(`\nPython script exited with code ${code}`));
-                }
-                controller.close();
-            });
+                pythonProcess.stderr.on('data', (data) => {
+                    controller.enqueue(new TextEncoder().encode(`ERROR: ${data.toString()}`));
+                });
 
-            pythonProcess.on('error', (err) => {
-                controller.error(err);
-            });
+                pythonProcess.on('close', (code) => {
+                    if (code !== 0) {
+                        controller.enqueue(new TextEncoder().encode(`\nPython script exited with code ${code}`));
+                    }
+                    controller.close();
+                });
+
+                // The 'error' event is emitted when the process can't be spawned.
+                pythonProcess.on('error', (err: NodeJS.ErrnoException) => {
+                    // ENOENT means the command was not found.
+                    if (command === 'python' && err.code === 'ENOENT') {
+                        const fallbackMessage = "INFO: 'python' command not found. Attempting to use 'python3'.\n";
+                        console.log(fallbackMessage.trim());
+                        controller.enqueue(new TextEncoder().encode(fallbackMessage));
+                        // If 'python' fails, try 'python3'.
+                        attemptSpawn('python3');
+                    } else {
+                        // If 'python3' also fails or another error occurs, report it.
+                        const errorMessage = `ERROR: Failed to start Python process with command '${command}'. Please ensure Python is installed and in your system's PATH.`;
+                        console.error(errorMessage, err);
+                        controller.enqueue(new TextEncoder().encode(`${errorMessage}\n${err.toString()}`));
+                        controller.error(err);
+                    }
+                });
+            };
+
+            // Start by attempting to use the 'python' command.
+            attemptSpawn('python');
         }
     });
 
