@@ -52,3 +52,5 @@ firestore-debug.log
 # ide
 /.vs/
 
+# python
+/src/backend/src/__pycache__/
