@@ -6,10 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileQuestion, Loader } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import * as pdfjs from 'pdfjs-dist';
 
-// Set up the worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface ContextViewerProps {
   contextFile: ContextFile | undefined;
@@ -20,12 +17,27 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        if (contextFile) {
+        // Define an async function to handle the PDF rendering
+        const renderPdf = async () => {
+            if (!contextFile) {
+                setRenderedContent(null);
+                setIsLoading(false);
+                return;
+            }
+
             setIsLoading(true);
             setRenderedContent(null);
-            
-            const loadingTask = pdfjs.getDocument(contextFile.content);
-            loadingTask.promise.then(async (pdf) => {
+
+            try {
+                // Dynamically import pdfjs-dist ONLY on the client-side
+                const pdfjs = await import('pdfjs-dist');
+
+                // Set the worker source
+                pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+                const loadingTask = pdfjs.getDocument(contextFile.content);
+                const pdf = await loadingTask.promise;
+
                 const numPages = pdf.numPages;
                 const textContents: React.ReactNode[] = [];
 
@@ -37,16 +49,17 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
                 }
 
                 setRenderedContent(textContents);
-                setIsLoading(false);
-            }).catch(error => {
+
+            } catch (error) {
                 console.error("Error loading PDF:", error);
                 setRenderedContent(<p className="p-4 text-destructive">Error rendering PDF.</p>);
+            } finally {
                 setIsLoading(false);
-            });
-        } else {
-            setRenderedContent(null);
-            setIsLoading(false);
-        }
+            }
+        };
+
+        renderPdf(); // Call the async function
+
     }, [contextFile]);
 
     const getDisplayContent = () => {
