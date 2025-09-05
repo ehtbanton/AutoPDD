@@ -1,6 +1,6 @@
 'use server';
 
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import { Buffer } from 'buffer';
@@ -11,6 +11,8 @@ const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'backend', 'pdd_temp
 const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents', 'prime_road');
 const UPLOAD_DIR_OUTPUT = path.join(process.cwd(), 'src', 'backend', 'auto_pdd_output');
 const OUTPUT_FILE_NAME = 'AutoPDD_prime_road.docx';
+
+let pythonProcess: ChildProcess | null = null;
 
 async function ensureDir(dir: string) {
     try {
@@ -62,7 +64,7 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
             const pythonCwd = path.join(process.cwd(), 'src', 'backend', 'src');
 
             const attemptSpawn = (command: string) => {
-                const pythonProcess = spawn(command, [pythonScriptPath], {
+                pythonProcess = spawn(command, [pythonScriptPath], {
                     cwd: pythonCwd,
                     shell: true
                 });
@@ -80,6 +82,7 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
                         controller.enqueue(new TextEncoder().encode(`\nPython script exited with code ${code}`));
                     }
                     controller.close();
+                    pythonProcess = null;
                 });
 
                 // The 'error' event is emitted when the process can't be spawned.
@@ -107,6 +110,13 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
     });
 
     return stream;
+}
+
+export async function stopPythonBackend() {
+    if (pythonProcess) {
+        pythonProcess.kill();
+        pythonProcess = null;
+    }
 }
 
 export async function getOutputFileAsHtml(): Promise<string | null> {
