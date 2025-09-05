@@ -271,15 +271,20 @@ const Page: FC = () => {
                 variant: "destructive",
             });
         } finally {
+            const stoppedByUser = !processingRef.current;
+
             setIsProcessing(false);
             processingRef.current = false;
             if (pollingIntervalRef.current) {
                 clearInterval(pollingIntervalRef.current);
                 pollingIntervalRef.current = null;
             }
-            // Final update after processing is finished
-            log("Fetching final version of the document...");
-            await updateOutputViewer();
+
+            // Only perform the final update if the process finished on its own
+            if (!stoppedByUser) {
+                log("Fetching final version of the document...");
+                await updateOutputViewer();
+            }
             log("Document processing complete.");
         }
     };

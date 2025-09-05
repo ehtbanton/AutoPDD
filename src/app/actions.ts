@@ -66,7 +66,7 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
             const attemptSpawn = (command: string) => {
                 pythonProcess = spawn(command, [pythonScriptPath], {
                     cwd: pythonCwd,
-                    shell: true
+                    detached: true, // Create a separate process group
                 });
 
                 pythonProcess.stdout.on('data', (data) => {
@@ -85,17 +85,13 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
                     pythonProcess = null;
                 });
 
-                // The 'error' event is emitted when the process can't be spawned.
                 pythonProcess.on('error', (err: NodeJS.ErrnoException) => {
-                    // ENOENT means the command was not found.
                     if (command === 'python' && err.code === 'ENOENT') {
                         const fallbackMessage = "INFO: 'python' command not found. Attempting to use 'python3'.\n";
                         console.log(fallbackMessage.trim());
                         controller.enqueue(new TextEncoder().encode(fallbackMessage));
-                        // If 'python' fails, try 'python3'.
                         attemptSpawn('python3');
                     } else {
-                        // If 'python3' also fails or another error occurs, report it.
                         const errorMessage = `ERROR: Failed to start Python process with command '${command}'. Please ensure Python is installed and in your system's PATH.`;
                         console.error(errorMessage, err);
                         controller.enqueue(new TextEncoder().encode(`${errorMessage}\n${err.toString()}`));
@@ -104,7 +100,6 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
                 });
             };
 
-            // Start by attempting to use the 'python' command.
             attemptSpawn('python');
         }
     });
@@ -113,9 +108,17 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
 }
 
 export async function stopPythonBackend() {
-    if (pythonProcess) {
-        pythonProcess.kill();
-        pythonProcess = null;
+    if (pythonProcess && pythonProcess.pid) {
+        try {
+            // Kill the entire process group using the negative PID with SIGKILL
+            process.kill(-pythonProcess.pid, 'SIGKILL');
+        } catch (e) {
+            console.error("Failed to kill process group, falling back to single process kill:", e);
+            // Fallback for safety
+            pythonProcess.kill('SIGKILL');
+        } finally {
+            pythonProcess = null;
+        }
     }
 }
 
