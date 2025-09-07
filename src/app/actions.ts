@@ -4,11 +4,6 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import { Buffer } from 'buffer';
-import mammoth from "mammoth";
-
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
-const OUTPUT_DOCX_PATH = path.join(UPLOAD_DIR, 'output.docx');
-
 
 const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'backend', 'pdd_template');
 const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents', 'prime_road');
@@ -85,17 +80,13 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
                     controller.close();
                 });
 
-                // The 'error' event is emitted when the process can't be spawned.
                 pythonProcess.on('error', (err: NodeJS.ErrnoException) => {
-                    // ENOENT means the command was not found.
                     if (command === 'python' && err.code === 'ENOENT') {
                         const fallbackMessage = "INFO: 'python' command not found. Attempting to use 'python3'.\n";
                         console.log(fallbackMessage.trim());
                         controller.enqueue(new TextEncoder().encode(fallbackMessage));
-                        // If 'python' fails, try 'python3'.
                         attemptSpawn('python3');
                     } else {
-                        // If 'python3' also fails or another error occurs, report it.
                         const errorMessage = `ERROR: Failed to start Python process with command '${command}'. Please ensure Python is installed and in your system's PATH.`;
                         console.error(errorMessage, err);
                         controller.enqueue(new TextEncoder().encode(`${errorMessage}\n${err.toString()}`));
@@ -104,7 +95,6 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
                 });
             };
 
-            // Start by attempting to use the 'python' command.
             attemptSpawn('python');
         }
     });
@@ -112,16 +102,16 @@ export async function runPythonBackend(): Promise<ReadableStream<Uint8Array>> {
     return stream;
 }
 
-export async function getOutputFileAsHtml(): Promise<string | null> {
+export async function getOutputFileAsBase64(): Promise<string | null> {
     const outputFilePath = path.join(UPLOAD_DIR_OUTPUT, OUTPUT_FILE_NAME);
     try {
-        await fs.access(outputFilePath); // Check if file exists
-        const arrayBuffer = await fs.readFile(outputFilePath);
-        const result = await mammoth.convertToHtml({ buffer: arrayBuffer });
-        return result.value;
+        const fileBuffer = await fs.readFile(outputFilePath);
+        return fileBuffer.toString('base64');
     } catch (error) {
-        console.error("Error reading or converting output file:", error);
-        return null; // Return null if file doesn't exist or there's an error
+        if (error.code !== 'ENOENT') {
+            console.error("Error reading output file for base64:", error);
+        }
+        return null;
     }
 }
 
@@ -155,17 +145,6 @@ export async function getTemplateName(): Promise<string | null> {
         return templateFile || null;
     } catch (error) {
         console.error("Error reading template directory:", error);
-        return null;
-    }
-}
-
-export async function getOutputFileAsBlob(): Promise<Blob | null> {
-    try {
-        const fileBuffer = await fs.readFile(OUTPUT_DOCX_PATH);
-        const blob = new Blob([fileBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-        return blob;
-    } catch (error) {
-        console.error("Error reading output file for blob:", error);
         return null;
     }
 }
