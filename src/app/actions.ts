@@ -6,6 +6,9 @@ import fs from 'fs/promises';
 import { Buffer } from 'buffer';
 import mammoth from "mammoth";
 
+const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+const OUTPUT_DOCX_PATH = path.join(UPLOAD_DIR, 'output.docx');
+
 
 const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'backend', 'pdd_template');
 const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents', 'prime_road');
@@ -152,6 +155,17 @@ export async function getTemplateName(): Promise<string | null> {
         return templateFile || null;
     } catch (error) {
         console.error("Error reading template directory:", error);
+        return null;
+    }
+}
+
+export async function getOutputFileAsBlob(): Promise<Blob | null> {
+    try {
+        const fileBuffer = await fs.readFile(OUTPUT_DOCX_PATH);
+        const blob = new Blob([fileBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+        return blob;
+    } catch (error) {
+        console.error("Error reading output file for blob:", error);
         return null;
     }
 }
