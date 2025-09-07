@@ -22,7 +22,7 @@ import os
 import sys
 from gemini_interface import setup_gemini, ask_gemini, upload_files_to_gemini
 from context_manager import extract_text_from_folder
-from text_processing import retrieve_contents_list, get_pdd_targets, find_target_location, cleanup_response, assemble_system_prompt, assemble_user_prompt, is_valid_response
+from text_processing import retrieve_contents_list, get_pdd_targets, find_target_location, assemble_system_prompt, assemble_user_prompt, is_valid_response, parse_ai_json_response # <--- ADD parse_ai_json_response
 from word_editor import load_word_doc_to_string, create_output_doc_from_template, replace_section_in_word_doc
 from _section_filler import fill_section, refill_section
 
@@ -61,16 +61,13 @@ uploaded_files_cache = upload_files_to_gemini([os.path.join(context_folder, "all
 # --- 2. MAIN PROCESSING LOOP ---
 for target_idx, target in enumerate(pdd_targets):
     # 'target' is a tuple: (section_heading, subheading, subheading_idx, page_num)
-    start_marker = target[1]  # The subheading title is our start marker for replacement
+    start_marker = target[1]
 
-    # Determine the end marker to define the section's boundaries
     if target_idx + 1 < len(pdd_targets):
         end_marker = pdd_targets[target_idx + 1][1]
     else:
-        # For the last section, use a known final heading like "Appendix". Adjust if your template differs.
         end_marker = "Appendix" 
 
-    # Get the original placeholder text from the template to create the user prompt
     template_start_loc = find_target_location(target, template_text)
     template_end_loc = find_target_location(pdd_targets[target_idx + 1], template_text) if target_idx + 1 < len(pdd_targets) else -1
     infilling_info = template_text[template_start_loc:template_end_loc] if template_end_loc != -1 else template_text[template_start_loc:]
@@ -83,48 +80,60 @@ for target_idx, target in enumerate(pdd_targets):
     if output_text and output_start_loc != -1:
         section_text = output_text[output_start_loc:output_end_loc]
         if section_text and len(section_text.split("\n")) > 2:
-             section_status = section_text.split("\n")[2]
+             # This logic might need adjustment depending on your exact template structure
+             # It assumes the status is on the third line of the section
+             section_status_line = section_text.split("\n")[2]
+             if "SECTION_COMPLETE" in section_status_line:
+                 section_status = "SECTION_COMPLETE"
+             elif "SECTION_ATTEMPTED" in section_status_line:
+                 section_status = "SECTION_ATTEMPTED"
 
-
-    if("SECTION_COMPLETE" in section_status):
+    if "SECTION_COMPLETE" in section_status:
         print(f"\nSection '{start_marker}' is already complete. Skipping...")
         sys.stdout.flush()
         continue
-    if("SECTION_ATTEMPTED" in section_status):
-        if(not there_are_new_files):
+    if "SECTION_ATTEMPTED" in section_status:
+        if not there_are_new_files:
             print(f"\nSection '{start_marker}' has previously been attempted and no new files are available. Skipping...")
             sys.stdout.flush()
             continue
         print(f"\nSection '{start_marker}' has previously been attempted, but there are new files! Retrying...")
         sys.stdout.flush()
         response = refill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache)
+    
     if not response:
         print(f"\n{'='*20}\nProcessing section: {start_marker}\n{'='*20}")
         sys.stdout.flush()
         response = fill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache)
 
-    print("\n--- Response ---")
+    # --- NEW: Parse the JSON response ---
+    print("\n--- Raw AI Response ---")
     print(response)
     print("-----------------------\n")
     sys.stdout.flush()
 
-    response = cleanup_response(response)
+    ai_json_data = parse_ai_json_response(response) # <-- NEW STEP
 
-    print("\n--- Revised response ---")
-    print(response)
-    print("-----------------------\n")
-    sys.stdout.flush()
+    if not ai_json_data:
+        print(f"CRITICAL: Failed to parse JSON for section '{start_marker}'. Skipping update for this section.")
+        # Optionally, you can set a failed status in the document here
+        replace_section_in_word_doc(output_path, start_marker, end_marker, {}, "SECTION_FAILED_PARSE")
+        continue
 
-
-    if("INFO_NOT_FOUND" not in response):
-        response = "SECTION_COMPLETE\n\n"+response
-        print("SECTION_COMPLETE")
-        sys.stdout.flush()
+    # --- NEW: Determine status based on JSON content ---
+    # Check if any "INFO_NOT_FOUND" values exist in the parsed JSON
+    info_not_found = any(data.get("value") == "INFO_NOT_FOUND" for data in ai_json_data.values())
+    
+    if not info_not_found:
+        final_status = "SECTION_COMPLETE"
     else:
-        response = "SECTION_ATTEMPTED\n\n"+response
-        print("SECTION_ATTEMPTED")
-        sys.stdout.flush()
-    replace_section_in_word_doc(output_path, start_marker, end_marker, response)
+        final_status = "SECTION_ATTEMPTED"
+    
+    print(f"Section status determined as: {final_status}")
+    sys.stdout.flush()
+    
+    # --- NEW: Call the updated word editor function ---
+    replace_section_in_word_doc(output_path, start_marker, end_marker, ai_json_data, final_status)
 
     # Removed user input to allow script to run non-interactively
     # user_input = input("\nPress Enter to continue to the next section, or 'q' to quit: ")

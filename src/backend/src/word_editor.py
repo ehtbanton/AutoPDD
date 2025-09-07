@@ -3,6 +3,7 @@ import docx
 import os
 import shutil
 import pypandoc
+import json
 import tempfile
 import sys
 from docx.oxml.text.paragraph import CT_P
@@ -85,6 +86,16 @@ def create_output_doc_from_template(project_name):
     sys.stdout.flush()
     return output_path
 
+def add_comment(paragraph, text, author="Source Reference"):
+    try:
+        # Only add a comment if there is actual sourced content.
+        if paragraph.text.strip() and "INFO_NOT_FOUND" not in text and text.strip() != "Source: N/A":
+            paragraph.add_comment(text, author=author)
+    except Exception:
+        pass
+
+
+
 def _delete_element(element):
     el = element._element
     el.getparent().remove(el)
@@ -130,80 +141,107 @@ def _insert_content_from_document(source_doc, target_doc, anchor_element):
             cursor = new_table._element # Move the cursor
 
 
-# --- FINAL MAIN FUNCTION ---
-def replace_section_in_word_doc(doc_path, start_marker, end_marker, new_content_str):
-    """
-    Uses Pandoc to create a temporary, perfectly-formatted doc, then performs a
-    high-level copy of its contents into the main document.
-    """
-    temp_file_handle, temp_docx_path = tempfile.mkstemp(suffix=".docx")
-    os.close(temp_file_handle)
-
+def replace_section_in_word_doc(doc_path, start_marker, end_marker, ai_json_data, status):
     try:
-        # STEP 1: Parse the incoming AI response
-        lines = new_content_str.strip().split('\n')
-        status_line = lines[0] if lines else "SECTION_ATTEMPTED"
-        markdown_content = "\n".join(lines[2:])
+        doc = docx.Document(doc_path)
+        all_blocks = list(_iter_block_items(doc))
 
-        # STEP 2: Use Pandoc to create a physical temporary DOCX file
-        pypandoc.convert_text(markdown_content, 'docx', format='md', outputfile=temp_docx_path)
-        
-        # STEP 3: Open both the main doc and the perfect temporary doc
-        temp_doc = docx.Document(temp_docx_path)
-        main_doc = docx.Document(doc_path)
-        
-        blocks = list(_iter_block_items(main_doc))
-
-        start_index, end_index = -1, -1
-        for i, block in enumerate(blocks):
-            if isinstance(block, docx.text.paragraph.Paragraph) and block.text.strip() == start_marker:
-                start_index = i
-            elif start_index != -1 and isinstance(block, docx.text.paragraph.Paragraph) and block.text.strip() == end_marker:
-                end_index = i
-                break
+        start_index, end_index = -1, len(all_blocks)
+        for i, block in enumerate(all_blocks):
+            if isinstance(block, docx.text.paragraph.Paragraph):
+                if block.text.strip() == start_marker:
+                    start_index = i
+                elif start_index != -1 and block.text.strip() == end_marker:
+                    end_index = i
+                    break
         
         if start_index == -1:
-            print(f"Warning: Start marker '{start_marker}' not found. Cannot update.")
-            sys.stdout.flush()
+            print(f"  > WARNING: Start marker '{start_marker}' not found.")
             return
 
-        if end_index == -1:
-            end_index = len(blocks)
-        
-        # STEP 4: Delete all old content to create a clean slate
-        if end_index > start_index + 1:
-            for i in range(end_index - 1, start_index, -1):
-                _delete_element(blocks[i])
+# Find or insert the status paragraph correctly, placing it AFTER the start marker.
+        status_p_index = start_index + 1
+        status_p = None
 
-        # STEP 5: Perform the new, robust, high-level copy
-        anchor = blocks[start_index]._element
-        
-        # Add status paragraph
-        status_p = main_doc.add_paragraph(status_line)
-        anchor.addnext(status_p._element)
+        # Check if a status paragraph ALREADY EXISTS immediately after the marker (SHOULDN'T BE HAPPENING ANYWAY BUT JUST IN CASE)
+        if status_p_index < len(all_blocks) and isinstance(all_blocks[status_p_index], docx.text.paragraph.Paragraph) and "SECTION_" in all_blocks[status_p_index].text:
+            # If it exists, just update its text.
+            all_blocks[status_p_index].text = status
+            status_p = all_blocks[status_p_index]
+        else:
+            # If it does NOT exist, insert a new one after the start marker.
+            # We do this by targeting the NEXT element and inserting BEFORE it.
+            if (start_index + 1) < len(all_blocks):
+                status_p = all_blocks[start_index + 1].insert_paragraph_before(status)
+            else:
+                # Handle edge case where start_marker is the last item in the document.
+                status_p = doc.add_paragraph(status)
+        print(f"  > Status for '{start_marker}' set to: {status}")
 
-        # The new anchor for copying content is the status paragraph itself
-        anchor_for_copy = status_p._element
-        _insert_content_from_document(temp_doc, main_doc, anchor_for_copy)
 
-        main_doc.save(doc_path)
+        section_blocks = all_blocks[start_index : end_index]
+
+        # Ensure we have data to work with
+        if not ai_json_data:
+            print(f"  > WARNING: No valid JSON data provided for section '{start_marker}'. Skipping content fill.")
+            doc.save(doc_path)
+            return
+
+        for block in section_blocks:
+            # Handle paragraphs with simple placeholder text
+            if isinstance(block, docx.text.paragraph.Paragraph):
+                for key, data_obj in ai_json_data.items():
+                    if key in block.text and isinstance(data_obj, dict):
+                        value = data_obj.get("value", "")
+                        source = data_obj.get("source", "N/A")
+                        block.text = block.text.replace(key, value)
+                        add_comment(block, f"Source: {source}")
+
+            # Handle tables with intelligent key matching
+            elif isinstance(block, docx.table.Table):
+                headers = [h.text.strip() for h in block.rows[0].cells]
+                
+                # Logic for simple 2-column key-value tables
+                if len(headers) == 2:
+                    for row in block.rows:
+                        label_cell = row.cells[0]
+                        value_cell = row.cells[1]
+                        label_text = label_cell.text.strip()
+                        if label_text in ai_json_data:
+                            data = ai_json_data[label_text]
+                            value = data.get("value", "")
+                            source = data.get("source", "N/A")
+                            value_cell.text = value
+                            add_comment(value_cell.paragraphs[0], f"Source: {source}")
+                
+                # Logic for multi-column data tables
+                else:
+                    for row in block.rows[1:]: # Skip header row
+                        row_context = row.cells[0].text.strip()
+                        if not row_context or "..." in row_context: continue
+                        clean_row_context = row_context.split('/')[0]
+
+                        for i, cell in enumerate(row.cells):
+                            if i == 0: continue
+                            
+                            header = headers[i]
+                            
+                            best_match_key = None
+                            for key in ai_json_data:
+                                if clean_row_context in key and header in key:
+                                    best_match_key = key
+                                    break
+                            
+                            if best_match_key:
+                                data = ai_json_data[best_match_key]
+                                value = data.get("value", "")
+                                source = data.get("source", "N/A")
+                                cell.text = value
+                                if cell.paragraphs:
+                                    add_comment(cell.paragraphs[0], f"Source: {source}")
+
+        doc.save(doc_path)
         print(f"Successfully updated section '{start_marker}' in {os.path.basename(doc_path)}.")
-        sys.stdout.flush()
 
-    except ImportError:
-        # Error handling remains the same
-        print("\nFATAL ERROR: pypandoc is not installed...")
-        sys.stdout.flush()
-        exit()
-    except OSError as e:
-        print(f"\nFATAL ERROR: Pandoc application not found or failed. Error: {e}")
-        sys.stdout.flush()
-        exit()
     except Exception as e:
-        print(f"FATAL ERROR during document generation for '{start_marker}': {e}")
-        sys.stdout.flush()
-
-    finally:
-        # STEP 6: Always clean up the temporary file
-        if os.path.exists(temp_docx_path):
-            os.remove(temp_docx_path)
+        print(f"FATAL ERROR during document generation for section '{start_marker}': {e}")

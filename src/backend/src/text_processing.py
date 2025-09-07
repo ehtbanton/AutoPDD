@@ -1,4 +1,6 @@
 
+import json
+
 
 def retrieve_contents_list(template_text: str) -> str:
     return template_text[template_text.find("Contents"):template_text.find("Appendix")].strip()
@@ -36,107 +38,47 @@ def find_target_location(target,template_text):
     return start_location
 
 
-def cleanup_response(response):
-    revised_response = None
-    # Cleaning tables...
-    lines_containing_table = [0]*len(response.split("\n"))
-    lines_which_are_empty = [1]*len(response.split("\n"))
-    for line in response.split("\n"):
-        if "|" in line:
-            lines_containing_table[response.split("\n").index(line)] = 1
-        else:
-            if line.strip():
-                lines_which_are_empty[response.split("\n").index(line)] = 0
-
-    # If the line before or after a table is not empty, delete it
-    for i in range(1, len(response.split("\n")) - 1):
-        if (not lines_which_are_empty[i]) and ((lines_containing_table[i + 1]) or (lines_containing_table[i - 1])):
-            revised_response = response.replace(response.split("\n")[i], "")
-
-
-    revised_response = response.replace(f"`", "")
-    return revised_response
-
-    return response
-
-
 def assemble_user_prompt(infilling_info):
-    # User prompt contains the exact information source from the TEMPLATE.
-    user_prompt = infilling_info.strip()
-    return user_prompt
+    # This now provides the raw section text as precise context for the AI.
+    return f"""
+Analyze the following section from a document template. For each field, placeholder, or table cell, find the corresponding information in the provided source documents.
+
+Template Section to Extract Data For:
+---
+{infilling_info}
+---
+
+Your task is to return a single JSON object as instructed in the system prompt.
+"""
 
 def assemble_system_prompt():
+    """
+    Assembles the system prompt with clear instructions for a flat JSON structure.
+    """
+    system_prompt = """You are a document analysis assistant. Your entire output MUST BE A SINGLE, VALID JSON OBJECT with a flat key-value structure.
 
-    system_prompt = """You are a document analysis assistant filling out a project template with information from provided documents.
+CRITICAL JSON RULES:
+1.  **JSON ONLY:** Your response MUST start with `{` and end with `}`. Do not include any text or markdown outside the JSON object.
+2.  **FLAT STRUCTURE:** Do NOT nest JSON objects or use lists. Every piece of information must be a direct key-value pair in the main JSON object.
+3.  **VALUE OBJECT:** The value for every key MUST be an object containing exactly two keys: `"value"` and `"source"`.
+4.  **MISSING INFORMATION:** If information is not found, the `"value"` must be the string "INFO_NOT_FOUND", and the `"source"` must be "N/A".
 
-CRITICAL INSTRUCTIONS:
-1. Follow the EXACT structure and format provided in the user template.
-2. Replace placeholders like [item of information] with the most accurate and complete data from the documents.
-3. For tables: maintain the exact table structure, including headers, separators, and formatting.
-4. If specific information is not found, write "INFO_NOT_FOUND: <information>" in that field. Always use exactly this phrasing.
-5. Do NOT write "INFO_NOT_FOUND" for entire sections; search each cell and row individually.
-6. Replace any pre-filled example table rows entirely with extracted data or "INFO_NOT_FOUND: <information>".
-7. Your response must contain ONLY the filled template. Do not include any explanations, commentary, headers, footers, or confirmation text.
+KEY NAMING CONVENTIONS:
+-   **For simple paragraphs or placeholders:** The JSON key should be a concise description of the information requested (e.g., "[Project Title]").
+-   **For TABLES:** This is critical. For each cell in a table that needs to be filled, create a unique key by combining the table's main title, the context from the cell's row (usually the text in the first column), and the text from the cell's column header.
+    -   **FORMAT:** `"Table Title: Row Context - Column Header"`
+    -   **EXAMPLE:** For the 'Audit History' table, a cell in the 'Validation' row under the 'Period' column should have the key `"Audit History: Validation/verification - Period"`.
+-   **For 2-COLUMN KEY-VALUE TABLES:** For simple tables with a label in the first column and a value in the second, the key should be the label from the first column.
+    -   **EXAMPLE:** For a row with "Sectoral scope" in the first column, the key should simply be `"Sectoral scope"`.
 
-ACCURACY AND VERIFICATION REQUIREMENTS:
-- NEVER infer, assume, calculate, or derive information not explicitly stated in the documents
-- NEVER use general knowledge about similar projects - only use information from the provided documents
-- NEVER round numbers, convert units, or modify technical specifications
-- NEVER combine information from different contexts to create new facts
-- NEVER use phrases like "approximately", "around", "about" unless those exact words appear in the source document
-- NEVER extrapolate dates, timelines, or schedules not explicitly mentioned
-- NEVER assume standard industry practices or typical project characteristics
-
-VERIFICATION CHECKLIST FOR EACH EXTRACTED PIECE OF INFORMATION:
-1. Can you find this exact information word-for-word in one of the documents?
-2. Is this information specifically about THIS project (not general industry information)?
-3. Are you copying the information exactly as written without modification?
-4. If the answer to ANY of these is NO, write "INFO_NOT_FOUND: <information>" instead
-
-EXHAUSTIVE SEARCH REQUIREMENTS:
-- Before marking ANY field as "INFO_NOT_FOUND", perform THREE separate search passes:
-  PASS 1: Search for exact terminology from the template
-  PASS 2: Search for synonyms, related terms, and technical variations
-  PASS 3: Search for contextual information that could be interpreted as the required data
-- Look in ALL document types: technical specs may be in environmental docs, dates may be in funding docs
-- Check document titles, headers, footers, and metadata sections
-- Look for information in charts, graphs, and table captions
-- Search for partial matches that could be combined to create complete answers
-
-EXPANDED SEARCH TERMS:
-- Validation → verification, assessment, evaluation, review, approval, certification
-- Audit → monitoring, inspection, compliance check, oversight, review
-- Timeline → schedule, phases, milestones, implementation period, duration
-- Capacity → power rating, output, generation capacity, installed capacity
-- Location → site, coordinates, address, geographic position, project area
-
-FORBIDDEN ACTIONS:
-- Do NOT create plausible-sounding information that is not in the documents
-- Do NOT use standard project assumptions or industry defaults
-- Do NOT modify technical specifications or measurements
-- Do NOT interpret unclear information - if unclear, mark as "INFO_NOT_FOUND: <information>"
-- Do NOT combine partial information from different sections to create complete answers unless they explicitly reference the same item
-- Do NOT use information from document examples, templates, or hypothetical scenarios within the documents
-
-TABLE FORMATTING RULES:
-- Make sure to use markdown format for all tables.
-- Fill each column with relevant information from documents.
-- If a cell has no data, write "INFO_NOT_FOUND: <information>".
-- Do not leave entire rows empty; fill each row's cells individually.
-- Replace pre-filled example text entirely.
-- Maintain original column headers exactly as provided.
-- Do not add extra rows or columns.
-
-QUALITY CONTROL:
-- Each piece of extracted information must be traceable to a specific location in the provided documents
-- If you cannot point to where specific information came from, do not include it
-- Prefer being conservative and marking fields as "INFO_NOT_FOUND: <information>" rather than guessing
-- Better to have accurate partial information than complete but incorrect information
-
-OUTPUT CONSTRAINTS:
-- Start directly with the template content and end when the template content ends.
-- Do not add any text outside the template, including summaries, explanations, or "Based on the documents…" prefixes.
-- Do not modify formatting, numbering, bullet points, or special symbols in the template."""
+EXAMPLE OF A PERFECT (FLAT) RESPONSE:
+{
+  "[Project Title]": { "value": "Prime Road Alternative (Cambodia) Company Limited", "source": "doc1.pdf" },
+  "Audit History: Validation/verification - Period": { "value": "24-March-2021", "source": "doc2.pdf" },
+  "Audit History: Validation/verification - Program": { "value": "VCS", "source": "doc2.pdf" },
+  "Sectoral scope": { "value": "Energy", "source": "doc1.pdf" }
+}
+"""
 
 # deprecated system prompts
     """
@@ -177,12 +119,26 @@ OUTPUT CONSTRAINTS:
     7. Cite specific document sections when possible
 
     """
-
-
-
     return system_prompt
 
 def is_valid_response(response, infilling_info):
     # For now make no checks
     return True
 
+def parse_ai_json_response(response_text):
+    """Safely parses the AI's string response into a Python dictionary."""
+    try:
+        # Clean the response by removing markdown code blocks if they exist
+        response_cleaned = response_text.strip()
+        if response_cleaned.startswith("```json"):
+            response_cleaned = response_cleaned[7:]
+        if response_cleaned.endswith("```"):
+            response_cleaned = response_cleaned[:-3]
+        
+        return json.loads(response_cleaned)
+    except json.JSONDecodeError:
+        print(f"  > !!! CRITICAL PARSE ERROR: AI did not return valid JSON.")
+        return None
+    except Exception as e:
+        print(f"  > !!! An unexpected error occurred during JSON parsing: {e}")
+        return None
