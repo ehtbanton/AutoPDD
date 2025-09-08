@@ -30,13 +30,11 @@ const DocxViewer: FC<{ file: Blob | null, scrollContainerRef: React.RefObject<HT
         if (file && renderContainer && scrollContainer) {
             const savedScrollTop = scrollContainer.scrollTop;
 
-            // Create a new container for rendering that is not visible
             const tempRenderContainer = document.createElement('div');
 
             docx.renderAsync(file, tempRenderContainer)
                 .then(() => {
                     console.log("Word document preview rendered.");
-                    // Clear previous render and append the new one
                     renderContainer.innerHTML = '';
                     renderContainer.appendChild(tempRenderContainer);
                     scrollContainer.scrollTop = savedScrollTop;
@@ -64,6 +62,7 @@ const Page: FC = () => {
     const [templatePath, setTemplatePath] = useState<string>('');
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const initialLoadDone = useRef(false);
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -97,6 +96,11 @@ const Page: FC = () => {
     }, [lastTemplateBase64, setLastTemplateBase64, setTemplateFile, setIsDocx]);
 
     useEffect(() => {
+        if (initialLoadDone.current) {
+            return;
+        }
+        initialLoadDone.current = true;
+
         const loadInitialData = async () => {
             log("Checking for existing files...");
             await updateOutputViewer();
