@@ -4,11 +4,15 @@ import type { FC } from 'react';
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import * as docx from 'docx-preview';
 import { TemplateEditor } from '@/components/template-editor';
-import { ContextViewer } from '@/components/context-viewer';
-import { ControlsPanel } from '@/components/controls-panel';
+import { ContextViewer } from '@/components/context-viewer'; // This will need updates
 import { useToast } from "@/hooks/use-toast";
 import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64 } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { LogsViewer } from '@/components/logs-viewer'; // New component for logs only
+import { DocumentViewerControls } from '@/components/document-viewer-controls'; // New component for template & fill buttons
 
 export type ContextFile = {
     name: string;
@@ -319,34 +323,36 @@ const Page: FC = () => {
 
     return (
         <main className="h-full flex flex-col p-4 gap-4 bg-background">
-            <header className="text-center lg:text-left">
-                <h1 className="font-headline text-5xl font-bold text-primary">
+            <header className="flex items-baseline gap-4 text-center lg:text-left mb-4">
+                <h1 className="font-display text-4xl font-bold text-primary whitespace-nowrap">
                     AutoPDD
                 </h1>
-                <p className="mt-2 text-lg text-muted-foreground">
+                <p className="text-base text-muted-foreground flex-grow">
                     Fill in your PDD automatically using a bundle of provided PDF files
                 </p>
             </header>
             <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-                <div className="lg:col-span-1 flex flex-col gap-2 min-h-0">
-                    <ControlsPanel
-                        logs={logs}
-                        onTemplateUpload={handleTemplateUpload}
-                        onContextUpload={handleContextUpload}
+                <div className="lg:col-span-1 flex flex-col gap-4 min-h-0">
+                    <LogsViewer logs={logs} /> {/* Now only displaying logs */}
+                    <ContextViewer
                         contextFiles={contextFiles}
                         selectedContextFile={selectedContextFile}
                         onContextSelect={handleContextSelect}
-                        onFillDocument={handleFillDocument}
-                        isProcessing={isProcessing}
-                        onStop={handleStop}
+                        onContextUpload={handleContextUpload}
                     />
-                    <ContextViewer contextFile={selectedContextFile} />
                 </div>
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                     {isDocx ? (
                         <Card className="flex-1 flex flex-col overflow-hidden">
-                            <CardHeader>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle>Document Viewer</CardTitle>
+                                <DocumentViewerControls
+                                    onTemplateUpload={handleTemplateUpload}
+                                    onFillDocument={handleFillDocument}
+                                    isProcessing={isProcessing}
+                                    onStop={handleStop}
+                                    templatePath={templatePath}
+                                />
                             </CardHeader>
                             <CardContent ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-secondary">
                                 <DocxViewer file={templateFile} scrollContainerRef={scrollContainerRef} />
