@@ -20,7 +20,6 @@ const initialLogs = [
     'Upload a Word document as a template and PDF files for context.',
 ];
 
-// Viewer component is now simpler. It receives a ref to the scrollable parent.
 const DocxViewer: FC<{ file: Blob | null, scrollContainerRef: React.RefObject<HTMLDivElement> }> = memo(({ file, scrollContainerRef }) => {
     const renderContainerRef = useRef<HTMLDivElement>(null);
 
@@ -31,12 +30,15 @@ const DocxViewer: FC<{ file: Blob | null, scrollContainerRef: React.RefObject<HT
         if (file && renderContainer && scrollContainer) {
             const savedScrollTop = scrollContainer.scrollTop;
 
-            // Clear previous render before drawing the new one
-            renderContainer.innerHTML = '';
+            // Create a new container for rendering that is not visible
+            const tempRenderContainer = document.createElement('div');
 
-            docx.renderAsync(file, renderContainer)
+            docx.renderAsync(file, tempRenderContainer)
                 .then(() => {
                     console.log("Word document preview rendered.");
+                    // Clear previous render and append the new one
+                    renderContainer.innerHTML = '';
+                    renderContainer.appendChild(tempRenderContainer);
                     scrollContainer.scrollTop = savedScrollTop;
                 })
                 .catch((error) => {
@@ -56,7 +58,7 @@ const Page: FC = () => {
     const [lastTemplateBase64, setLastTemplateBase64] = useState<string | null>(null);
     const [contextFiles, setContextFiles] = useState<ContextFile[]>([]);
     const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(undefined);
-    const [logs, setLogs] = useState<string[]>([]);
+    const [logs, setLogs] = useState<string[]>(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
     const { toast } = useToast();
     const [isProcessing, setIsProcessing] = useState(false);
     const processingRef = useRef<boolean>(false);
@@ -73,27 +75,27 @@ const Page: FC = () => {
     const updateOutputViewer = useCallback(async () => {
         try {
             const base64 = await getOutputFileAsBase64();
-            if (base64 && base64.length > 0 && base64 !== lastTemplateBase64) {
-                setLastTemplateBase64(base64);
-                const fetchResponse = await fetch(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`);
-                if (!fetchResponse.ok) throw new Error('Failed to parse Base64 data URI');
+            if (base64 && base64.length > 0) {
+                if (base64 !== lastTemplateBase64) {
+                    setLastTemplateBase64(base64);
+                    const fetchResponse = await fetch(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`);
+                    if (!fetchResponse.ok) throw new Error('Failed to parse Base64 data URI');
 
-                const blob = await fetchResponse.blob();
-                if (blob.size > 0) {
-                    setTemplateFile(blob);
-                    const templateName = await getTemplateName();
-                    setIsDocx(templateName ? templateName.toLowerCase().endsWith('.docx') : false);
-                } else {
-                    setTemplateFile(null);
+                    const blob = await fetchResponse.blob();
+                    if (blob.size > 0) {
+                        setTemplateFile(blob);
+                        const templateName = await getTemplateName();
+                        setIsDocx(templateName ? templateName.toLowerCase().endsWith('.docx') : false);
+                    }
                 }
-            } else if (!base64 || base64.length === 0) {
+            } else {
                 setTemplateFile(null);
             }
         } catch (error) {
             console.error("Failed to update output viewer:", error);
             setTemplateFile(null);
         }
-    }, [lastTemplateBase64]);
+    }, [lastTemplateBase64, setLastTemplateBase64, setTemplateFile, setIsDocx]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -115,9 +117,9 @@ const Page: FC = () => {
                 log(`Loaded ${files.length} existing context file(s).`);
             }
         };
-        setLogs(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
         loadInitialData();
-    }, [log, updateOutputViewer]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleTemplateUpload = async (file: File) => {
         log(`Uploading template "${file.name}"...`);
