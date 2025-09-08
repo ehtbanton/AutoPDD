@@ -47,7 +47,6 @@ const DocxViewer: FC<{ file: Blob | null, scrollContainerRef: React.RefObject<HT
         }
     }, [file, scrollContainerRef]);
 
-    // This component no longer handles layout, only rendering.
     return <div ref={renderContainerRef} className="bg-white shadow-lg mx-auto"></div>;
 });
 DocxViewer.displayName = 'DocxViewer';
@@ -64,7 +63,7 @@ const Page: FC = () => {
     const processingRef = useRef<boolean>(false);
     const [templatePath, setTemplatePath] = useState<string>('');
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const scrollContainerRef = useRef<HTMLDivElement>(null); // Ref for the scrollable element
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -118,8 +117,7 @@ const Page: FC = () => {
             }
         };
         loadInitialData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [log, updateOutputViewer]);
 
     const handleTemplateUpload = async (file: File) => {
         log(`Uploading template "${file.name}"...`);
@@ -133,6 +131,7 @@ const Page: FC = () => {
             const buffer = Buffer.from(arrayBuffer);
             try {
                 await uploadTemplateFile(file.name, buffer.toString('base64'));
+                await updateOutputViewer();
                 setTemplatePath(file.name);
                 log(`Template "${file.name}" uploaded for processing.`);
                 toast({
@@ -161,40 +160,78 @@ const Page: FC = () => {
         let processedCount = 0;
         const fileArray = Array.from(files);
 
+        if (fileArray.length === 0) {
+            log("No files selected for context upload.");
+            return;
+        }
+
         fileArray.forEach(file => {
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const content = e.target?.result as ArrayBuffer;
+
                 try {
                     const buffer = Buffer.from(content);
                     await uploadContextFile(file.name, buffer.toString('base64'));
-                    log(`Successfully uploaded "${file.name}".`);
-                    newFiles.push({ name: file.name, content: content.slice(0) });
+                    log(`Successfully uploaded and saved "${file.name}".`);
+
+                    const contentCopy = content.slice(0);
+                    const newFile = { name: file.name, content: contentCopy };
+                    newFiles.push(newFile);
+
                 } catch (error) {
-                    log(`Error uploading file "${file.name}": ${error}`);
+                    console.error(`Error uploading context file "${file.name}":`, error);
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    log(`Error uploading file "${file.name}": ${errorMessage}`);
+                    toast({
+                        title: "Upload Failed",
+                        description: `Could not save "${file.name}" on the server.`,
+                        variant: "destructive",
+                    });
                 }
+
                 processedCount++;
                 if (processedCount === fileArray.length) {
-                    setContextFiles(prevFiles => {
-                        const updatedFiles = [...prevFiles];
-                        newFiles.forEach(newFile => {
-                            const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
-                            if (existingIndex !== -1) updatedFiles[existingIndex] = newFile;
-                            else updatedFiles.push(newFile);
+                    if (newFiles.length > 0) {
+                        setContextFiles(prevFiles => {
+                            const updatedFiles = [...prevFiles];
+                            newFiles.forEach(newFile => {
+                                const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
+                                if (existingIndex !== -1) {
+                                    log(`Replacing existing file in UI: "${newFile.name}"`);
+                                    updatedFiles[existingIndex] = newFile;
+                                } else {
+                                    updatedFiles.push(newFile);
+                                }
+                            });
+                            return updatedFiles;
                         });
-                        return updatedFiles;
-                    });
 
-                    if (!selectedContextFile && newFiles.length > 0) {
-                        setSelectedContextFile(newFiles[0]);
+                        if (!selectedContextFile) {
+                            setSelectedContextFile(newFiles[0]);
+                        }
+
+                        log(`${newFiles.length} context file(s) processed for UI.`);
+                        toast({
+                            title: "Upload Complete",
+                            description: `${newFiles.length} context file(s) have been loaded.`,
+                            variant: "default",
+                            className: "bg-accent text-accent-foreground",
+                        });
+                    } else {
+                        log(`No new context files were successfully uploaded.`);
                     }
-                    toast({
-                        title: "Upload Complete",
-                        description: `${newFiles.length} context files loaded.`,
-                        variant: "default",
-                    });
                 }
             };
+            reader.onerror = (error) => {
+                log(`Error reading file "${file.name}": ${error}`);
+                toast({
+                    title: "Upload Failed",
+                    description: `There was an error reading "${file.name}".`,
+                    variant: "destructive",
+                });
+                processedCount++;
+            }
             reader.readAsArrayBuffer(file);
         });
     };
@@ -202,23 +239,33 @@ const Page: FC = () => {
     const handleContextSelect = (fileName: string) => {
         const file = contextFiles.find(f => f.name === fileName);
         setSelectedContextFile(file);
+        if (file) {
+            log(`Context file "${fileName}" selected.`);
+        }
     }
 
     const handleFillDocument = async () => {
         if (!templatePath) {
             log("Error: Please upload a template document first.");
-            toast({ title: "Template Missing", variant: "destructive" });
+            toast({
+                title: "Template Missing",
+                description: "You must upload a template .docx file before filling the document.",
+                variant: "destructive",
+            });
             return;
         }
-        log("Starting document processing...");
+
+        log("Starting document processing with Python backend...");
         setIsProcessing(true);
         processingRef.current = true;
+
         pollingIntervalRef.current = setInterval(updateOutputViewer, 3000);
 
         try {
             const stream = await runPythonBackend();
             const reader = stream.getReader();
             const decoder = new TextDecoder();
+
             while (processingRef.current) {
                 const { value, done } = await reader.read();
                 if (done) {
@@ -227,22 +274,43 @@ const Page: FC = () => {
                 }
                 const decodedChunk = decoder.decode(value, { stream: true });
                 const lines = decodedChunk.split('\n').filter(line => line.trim() !== '');
-                for (const line of lines) log(line);
+                for (const line of lines) {
+                    log(line);
+                }
             }
+            if (!processingRef.current) {
+                log("Processing stopped by user.");
+            }
+
         } catch (error) {
-            log(`Error: ${error}`);
+            console.error("Error running python backend: ", error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error: ${errorMessage}`);
+            toast({
+                title: "Backend Error",
+                description: "The Python script failed to run. Check the console for details.",
+                variant: "destructive",
+            });
         } finally {
             setIsProcessing(false);
             processingRef.current = false;
-            if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+            log("Fetching final version of the document...");
             await updateOutputViewer();
-            log("Processing finished.");
+            log("Document processing complete.");
         }
     };
 
     const handleStop = () => {
-        log("Stopping processing...");
+        log("Stop button pressed. Attempting to stop processing...");
         processingRef.current = false;
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
     };
 
     return (
@@ -281,7 +349,9 @@ const Page: FC = () => {
                             </CardContent>
                         </Card>
                     ) : (
-                        <TemplateEditor file={templateFile} />
+                        <TemplateEditor
+                            content={''}
+                        />
                     )}
                 </div>
             </div>
