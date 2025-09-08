@@ -2,11 +2,13 @@
 
 import type { FC } from 'react';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as docx from 'docx-preview';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { useToast } from "@/hooks/use-toast";
 import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64 } from '@/app/actions';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export type ContextFile = {
     name: string;
@@ -20,6 +22,7 @@ const initialLogs = [
 
 const Page: FC = () => {
     const [templateFile, setTemplateFile] = useState<Blob | null>(null);
+    const [isDocx, setIsDocx] = useState(false); // State to track if the template is a .docx file
     const [contextFiles, setContextFiles] = useState<ContextFile[]>([]);
     const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(undefined);
     const [logs, setLogs] = useState<string[]>([]);
@@ -38,33 +41,46 @@ const Page: FC = () => {
     const updateOutputViewer = useCallback(async () => {
         try {
             const base64 = await getOutputFileAsBase64();
-
-            // The crucial check: ensure the base64 string is not null and has content.
             if (base64 && base64.length > 0) {
                 const fetchResponse = await fetch(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`);
-                if (!fetchResponse.ok) {
-                    // If the fetch fails, it means the base64 string was invalid.
-                    throw new Error('Failed to parse Base64 data URI');
-                }
-                const blob = await fetchResponse.blob();
+                if (!fetchResponse.ok) throw new Error('Failed to parse Base64 data URI');
 
-                // Also check if the resulting blob has a size.
+                const blob = await fetchResponse.blob();
                 if (blob.size > 0) {
                     setTemplateFile(blob);
+                    // Assuming the output file is always docx
+                    const templateName = await getTemplateName();
+                    setIsDocx(templateName ? templateName.endsWith('.docx') : false);
                 } else {
-                    // If the blob is empty, treat it as if there's no file.
                     setTemplateFile(null);
                 }
             } else {
-                // If the base64 is null or empty, there is no file to show.
                 setTemplateFile(null);
             }
         } catch (error) {
             console.error("Failed to update output viewer:", error);
-            // Set to null to avoid showing a broken viewer.
             setTemplateFile(null);
         }
     }, []);
+
+    // Effect to render .docx files when templateFile state changes
+    useEffect(() => {
+        if (templateFile && isDocx) {
+            const container = document.getElementById('docx-container');
+            if (container) {
+                // Clear the container before rendering
+                container.innerHTML = '';
+                docx.renderAsync(templateFile, container)
+                    .then(() => {
+                        log("Word document preview rendered.");
+                    })
+                    .catch((error) => {
+                        console.error("Error rendering DOCX:", error);
+                        log("Error rendering Word document preview.");
+                    });
+            }
+        }
+    }, [templateFile, isDocx, log]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -93,15 +109,20 @@ const Page: FC = () => {
 
     const handleTemplateUpload = async (file: File) => {
         log(`Uploading template "${file.name}"...`);
+
+        // Update state to handle client-side rendering
+        setIsDocx(file.name.toLowerCase().endsWith('.docx'));
+        setTemplateFile(file);
+
         const reader = new FileReader();
         reader.onload = async (e) => {
             const arrayBuffer = e.target?.result as ArrayBuffer;
             const buffer = Buffer.from(arrayBuffer);
             try {
+                // Still upload the file to the backend for processing
                 await uploadTemplateFile(file.name, buffer.toString('base64'));
-                await updateOutputViewer();
                 setTemplatePath(file.name);
-                log(`Template "${file.name}" uploaded and output file created.`);
+                log(`Template "${file.name}" uploaded for processing.`);
                 toast({
                     title: "Upload Successful",
                     description: `Template "${file.name}" has been loaded.`,
@@ -247,9 +268,20 @@ const Page: FC = () => {
                     <ContextViewer contextFile={selectedContextFile} />
                 </div>
                 <div className="lg:col-span-2 flex flex-col min-h-0">
-                    <TemplateEditor
-                        file={templateFile}
-                    />
+                    {/* Conditional rendering for the document viewer */}
+                    {isDocx ? (
+                        <Card className="flex-1 flex flex-col">
+                            <CardHeader>
+                                <CardTitle>Document Viewer</CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex-grow p-4 bg-secondary overflow-auto">
+                                <div id="docx-container" className="bg-white shadow-lg mx-auto"></div>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        // Fallback to the original editor for non-docx files
+                        <TemplateEditor file={templateFile} />
+                    )}
                 </div>
             </div>
         </main>
