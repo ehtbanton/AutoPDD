@@ -1,7 +1,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import * as docx from 'docx-preview';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
@@ -20,9 +20,40 @@ const initialLogs = [
     'Upload a Word document as a template and PDF files for context.',
 ];
 
+// Viewer component is now simpler. It receives a ref to the scrollable parent.
+const DocxViewer: FC<{ file: Blob | null, scrollContainerRef: React.RefObject<HTMLDivElement> }> = memo(({ file, scrollContainerRef }) => {
+    const renderContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const renderContainer = renderContainerRef.current;
+        const scrollContainer = scrollContainerRef.current;
+
+        if (file && renderContainer && scrollContainer) {
+            const savedScrollTop = scrollContainer.scrollTop;
+
+            // Clear previous render before drawing the new one
+            renderContainer.innerHTML = '';
+
+            docx.renderAsync(file, renderContainer)
+                .then(() => {
+                    console.log("Word document preview rendered.");
+                    scrollContainer.scrollTop = savedScrollTop;
+                })
+                .catch((error) => {
+                    console.error("Error rendering DOCX:", error);
+                });
+        }
+    }, [file, scrollContainerRef]);
+
+    // This component no longer handles layout, only rendering.
+    return <div ref={renderContainerRef} className="bg-white shadow-lg mx-auto"></div>;
+});
+DocxViewer.displayName = 'DocxViewer';
+
 const Page: FC = () => {
     const [templateFile, setTemplateFile] = useState<Blob | null>(null);
-    const [isDocx, setIsDocx] = useState(false); // State to track if the template is a .docx file
+    const [isDocx, setIsDocx] = useState(false);
+    const [lastTemplateBase64, setLastTemplateBase64] = useState<string | null>(null);
     const [contextFiles, setContextFiles] = useState<ContextFile[]>([]);
     const [selectedContextFile, setSelectedContextFile] = useState<ContextFile | undefined>(undefined);
     const [logs, setLogs] = useState<string[]>([]);
@@ -31,6 +62,7 @@ const Page: FC = () => {
     const processingRef = useRef<boolean>(false);
     const [templatePath, setTemplatePath] = useState<string>('');
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null); // Ref for the scrollable element
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -41,46 +73,27 @@ const Page: FC = () => {
     const updateOutputViewer = useCallback(async () => {
         try {
             const base64 = await getOutputFileAsBase64();
-            if (base64 && base64.length > 0) {
+            if (base64 && base64.length > 0 && base64 !== lastTemplateBase64) {
+                setLastTemplateBase64(base64);
                 const fetchResponse = await fetch(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64}`);
                 if (!fetchResponse.ok) throw new Error('Failed to parse Base64 data URI');
 
                 const blob = await fetchResponse.blob();
                 if (blob.size > 0) {
                     setTemplateFile(blob);
-                    // Assuming the output file is always docx
                     const templateName = await getTemplateName();
-                    setIsDocx(templateName ? templateName.endsWith('.docx') : false);
+                    setIsDocx(templateName ? templateName.toLowerCase().endsWith('.docx') : false);
                 } else {
                     setTemplateFile(null);
                 }
-            } else {
+            } else if (!base64 || base64.length === 0) {
                 setTemplateFile(null);
             }
         } catch (error) {
             console.error("Failed to update output viewer:", error);
             setTemplateFile(null);
         }
-    }, []);
-
-    // Effect to render .docx files when templateFile state changes
-    useEffect(() => {
-        if (templateFile && isDocx) {
-            const container = document.getElementById('docx-container');
-            if (container) {
-                // Clear the container before rendering
-                container.innerHTML = '';
-                docx.renderAsync(templateFile, container)
-                    .then(() => {
-                        log("Word document preview rendered.");
-                    })
-                    .catch((error) => {
-                        console.error("Error rendering DOCX:", error);
-                        log("Error rendering Word document preview.");
-                    });
-            }
-        }
-    }, [templateFile, isDocx, log]);
+    }, [lastTemplateBase64]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -102,24 +115,21 @@ const Page: FC = () => {
                 log(`Loaded ${files.length} existing context file(s).`);
             }
         };
-
         setLogs(initialLogs.map(l => `[${new Date().toLocaleTimeString()}] ${l}`));
         loadInitialData();
     }, [log, updateOutputViewer]);
 
     const handleTemplateUpload = async (file: File) => {
         log(`Uploading template "${file.name}"...`);
-
-        // Update state to handle client-side rendering
         setIsDocx(file.name.toLowerCase().endsWith('.docx'));
         setTemplateFile(file);
+        setLastTemplateBase64(null);
 
         const reader = new FileReader();
         reader.onload = async (e) => {
             const arrayBuffer = e.target?.result as ArrayBuffer;
             const buffer = Buffer.from(arrayBuffer);
             try {
-                // Still upload the file to the backend for processing
                 await uploadTemplateFile(file.name, buffer.toString('base64'));
                 setTemplatePath(file.name);
                 log(`Template "${file.name}" uploaded for processing.`);
@@ -139,9 +149,7 @@ const Page: FC = () => {
                 });
             }
         };
-        reader.onerror = () => {
-            log(`Error reading file: ${file.name}`);
-        };
+        reader.onerror = () => log(`Error reading file: ${file.name}`);
         reader.readAsArrayBuffer(file);
     };
 
@@ -169,11 +177,8 @@ const Page: FC = () => {
                         const updatedFiles = [...prevFiles];
                         newFiles.forEach(newFile => {
                             const existingIndex = updatedFiles.findIndex(f => f.name === newFile.name);
-                            if (existingIndex !== -1) {
-                                updatedFiles[existingIndex] = newFile;
-                            } else {
-                                updatedFiles.push(newFile);
-                            }
+                            if (existingIndex !== -1) updatedFiles[existingIndex] = newFile;
+                            else updatedFiles.push(newFile);
                         });
                         return updatedFiles;
                     });
@@ -220,18 +225,14 @@ const Page: FC = () => {
                 }
                 const decodedChunk = decoder.decode(value, { stream: true });
                 const lines = decodedChunk.split('\n').filter(line => line.trim() !== '');
-                for (const line of lines) {
-                    log(line);
-                }
+                for (const line of lines) log(line);
             }
         } catch (error) {
             log(`Error: ${error}`);
         } finally {
             setIsProcessing(false);
             processingRef.current = false;
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-            }
+            if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
             await updateOutputViewer();
             log("Processing finished.");
         }
@@ -268,18 +269,16 @@ const Page: FC = () => {
                     <ContextViewer contextFile={selectedContextFile} />
                 </div>
                 <div className="lg:col-span-2 flex flex-col min-h-0">
-                    {/* Conditional rendering for the document viewer */}
                     {isDocx ? (
-                        <Card className="flex-1 flex flex-col">
+                        <Card className="flex-1 flex flex-col overflow-hidden">
                             <CardHeader>
                                 <CardTitle>Document Viewer</CardTitle>
                             </CardHeader>
-                            <CardContent className="flex-grow p-4 bg-secondary overflow-auto">
-                                <div id="docx-container" className="bg-white shadow-lg mx-auto"></div>
+                            <CardContent ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-secondary">
+                                <DocxViewer file={templateFile} scrollContainerRef={scrollContainerRef} />
                             </CardContent>
                         </Card>
                     ) : (
-                        // Fallback to the original editor for non-docx files
                         <TemplateEditor file={templateFile} />
                     )}
                 </div>
