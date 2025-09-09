@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 import { Buffer } from 'buffer';
 
 const UPLOAD_DIR_TEMPLATE = path.join(process.cwd(), 'src', 'backend', 'pdd_template');
-const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents', 'prime_road');
+const UPLOAD_DIR_CONTEXT = path.join(process.cwd(), 'src', 'backend', 'provided_documents');
 const UPLOAD_DIR_OUTPUT = path.join(process.cwd(), 'src', 'backend', 'auto_pdd_output');
 const OUTPUT_FILE_NAME = 'AutoPDD_prime_road.docx';
 
@@ -48,6 +48,24 @@ export async function uploadContextFile(fileName: string, fileContentBase64: str
     await ensureDir(UPLOAD_DIR_CONTEXT);
     const filePath = path.join(UPLOAD_DIR_CONTEXT, fileName);
     await fs.writeFile(filePath, Buffer.from(fileContentBase64, 'base64'));
+}
+
+export async function removeAllContexts() {
+    await ensureDir(UPLOAD_DIR_CONTEXT);
+    await cleanDir(UPLOAD_DIR_CONTEXT);
+}
+
+export async function resetTemplate() {
+    await ensureDir(UPLOAD_DIR_TEMPLATE);
+    await ensureDir(UPLOAD_DIR_OUTPUT);
+    await cleanDir(UPLOAD_DIR_OUTPUT);
+
+    const templateName = await getTemplateName();
+    if (templateName) {
+        const templateFilePath = path.join(UPLOAD_DIR_TEMPLATE, templateName);
+        const outputFilePath = path.join(UPLOAD_DIR_OUTPUT, OUTPUT_FILE_NAME);
+        await fs.copyFile(templateFilePath, outputFilePath);
+    }
 }
 
 

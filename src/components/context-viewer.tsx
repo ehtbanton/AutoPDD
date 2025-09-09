@@ -3,7 +3,7 @@
 import type { ContextFile } from '@/app/page';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileQuestion, ChevronDown, File } from 'lucide-react';
+import { FileQuestion, ChevronDown, File, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import PdfViewer from './pdf-viewer'; // Import the new PdfViewer component
 import { FileUploadButton } from './file-upload-button';
@@ -16,9 +16,10 @@ interface ContextViewerProps {
     contextFiles: ContextFile[];
     selectedContextFile: ContextFile | undefined;
     onContextSelect: (fileName: string) => void;
+    onRemoveAllContexts: () => void;
 }
 
-export function ContextViewer({ contextFile, onContextUpload, contextFiles, selectedContextFile, onContextSelect }: ContextViewerProps) {
+export function ContextViewer({ contextFile, onContextUpload, contextFiles, selectedContextFile, onContextSelect, onRemoveAllContexts }: ContextViewerProps) {
     const [fileUrl, setFileUrl] = useState<string>('');
 
     useEffect(() => {
@@ -54,6 +55,14 @@ export function ContextViewer({ contextFile, onContextUpload, contextFiles, sele
                         Context:
                     </CardTitle>
                     <div className="flex gap-2">
+                        <Button
+                            onClick={onRemoveAllContexts}
+                            variant="destructive"
+                            size="sm"
+                            disabled={contextFiles.length === 0}
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" /> Clear
+                        </Button>
                         <FileUploadButton
                             onFileSelect={(files) => onContextUpload(files as FileList)}
                             variant="outline"

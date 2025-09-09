@@ -8,8 +8,10 @@ import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64 } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
 
 export type ContextFile = {
     name: string;
@@ -318,6 +320,53 @@ const Page: FC = () => {
         }
     };
 
+    const handleResetTemplate = async () => {
+        log("Resetting to blank template...");
+        try {
+            await resetTemplate();
+            await updateOutputViewer();
+            log("Template reset to blank.");
+            toast({
+                title: "Template Reset",
+                description: "The document has been reset to its blank template.",
+                variant: "default",
+                className: "bg-accent text-accent-foreground",
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error resetting template: ${errorMessage}`);
+            toast({
+                title: "Reset Failed",
+                description: "Could not reset the template.",
+                variant: "destructive",
+            });
+        }
+    }
+
+    const handleRemoveAllContexts = async () => {
+        log("Removing all context documents...");
+        try {
+            await removeAllContexts();
+            setContextFiles([]);
+            setSelectedContextFile(undefined);
+            log("All context documents removed.");
+            toast({
+                title: "Contexts Removed",
+                description: "All context documents have been removed.",
+                variant: "default",
+                className: "bg-accent text-accent-foreground",
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error removing contexts: ${errorMessage}`);
+            toast({
+                title: "Removal Failed",
+                description: "Could not remove context documents.",
+                variant: "destructive",
+            });
+        }
+    }
+
     return (
         <main className="h-full flex flex-col p-4 gap-4 bg-background">
             <header className="flex items-baseline mb-2">
@@ -342,6 +391,7 @@ const Page: FC = () => {
                         contextFiles={contextFiles}
                         selectedContextFile={selectedContextFile}
                         onContextSelect={handleContextSelect}
+                        onRemoveAllContexts={handleRemoveAllContexts}
                     />
                 </div>
                 <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -349,10 +399,15 @@ const Page: FC = () => {
                         <Card className="flex-1 flex flex-col overflow-hidden">
                             <CardHeader>
                                 <div className="flex justify-between items-center">
-                                    <CardTitle>Document Viewer</CardTitle>
-                                    <FileUploadButton onFileSelect={handleTemplateUpload} size="sm" variant="outline">
-                                        Upload Template
-                                    </FileUploadButton>
+                                    <CardTitle>PDD Viewer</CardTitle>
+                                    <div className="flex items-center gap-2">
+                                        <Button onClick={handleResetTemplate} size="sm" variant="destructive">
+                                            <Trash2 className="mr-2 h-4 w-4" /> Reset to Blank
+                                        </Button>
+                                        <FileUploadButton onFileSelect={handleTemplateUpload} size="sm" variant="outline">
+                                            Upload Template
+                                        </FileUploadButton>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-secondary">
