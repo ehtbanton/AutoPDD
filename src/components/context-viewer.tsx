@@ -1,78 +1,34 @@
-
 "use client";
 
 import type { ContextFile } from '@/app/page';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileQuestion, Loader } from 'lucide-react';
+import { FileQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
+import PdfViewer from './pdf-viewer'; // Import the new PdfViewer component
 
 interface ContextViewerProps {
   contextFile: ContextFile | undefined;
 }
 
 export function ContextViewer({ contextFile }: ContextViewerProps) {
-    const [renderedContent, setRenderedContent] = useState<React.ReactNode>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [fileUrl, setFileUrl] = useState<string>('');
 
     useEffect(() => {
-        // Define an async function to handle the PDF rendering
-        const renderPdf = async () => {
-            if (!contextFile) {
-                setRenderedContent(null);
-                setIsLoading(false);
-                return;
-            }
+        if (contextFile?.content) {
+            const blob = new Blob([contextFile.content], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            setFileUrl(url);
 
-            setIsLoading(true);
-            setRenderedContent(null);
-
-            try {
-                // Dynamically import pdfjs-dist ONLY on the client-side
-                const pdfjs = await import('pdfjs-dist');
-
-                // Set the worker source
-                pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-
-                const loadingTask = pdfjs.getDocument(contextFile.content);
-                const pdf = await loadingTask.promise;
-
-                const numPages = pdf.numPages;
-                const textContents: React.ReactNode[] = [];
-
-                for (let i = 1; i <= numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map((item: any) => item.str).join(' ');
-                    textContents.push(<div key={`page_${i}`} className="p-4 border-b">{pageText}</div>);
-                }
-
-                setRenderedContent(textContents);
-
-            } catch (error) {
-                console.error("Error loading PDF:", error);
-                setRenderedContent(<p className="p-4 text-destructive">Error rendering PDF.</p>);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        renderPdf(); // Call the async function
-
+            return () => {
+                URL.revokeObjectURL(url);
+            };
+        }
     }, [contextFile]);
 
     const getDisplayContent = () => {
-        if (isLoading) {
-            return (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                    <Loader className="w-8 h-8 mb-2 animate-spin" />
-                    <p className="text-xs">Rendering PDF...</p>
-                </div>
-            );
-        }
-        if (renderedContent) {
-            return <div className="prose max-w-none">{renderedContent}</div>;
+        if (contextFile) {
+            return <PdfViewer fileUrl={fileUrl} />;
         }
         return (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4 text-center">
