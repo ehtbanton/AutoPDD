@@ -319,11 +319,11 @@ const Page: FC = () => {
 
     return (
         <main className="h-full flex flex-col p-4 gap-4 bg-background">
-            <header className="text-center lg:text-left">
-                <h1 className="font-headline text-5xl font-bold text-primary">
+            <header className="flex items-baseline mb-2">
+                <h1 className="font-headline text-lg font-bold text-primary">
                     AutoPDD
                 </h1>
-                <p className="mt-2 text-lg text-muted-foreground">
+                <p className="ml-4 text-sm text-muted-foreground">
                     Fill in your PDD automatically using a bundle of provided PDF files
                 </p>
             </header>
