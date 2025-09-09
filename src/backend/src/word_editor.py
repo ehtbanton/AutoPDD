@@ -105,7 +105,6 @@ def replace_section_in_word_doc(doc_path, start_marker, end_marker, ai_json_data
             print(f"  > WARNING: Start marker '{start_marker}' not found.")
             return
 
-        # ---- THIS IS THE NEW, CORRECTED CODE ----
         status_p_index = start_index + 1
         # Check if the paragraph immediately after the heading is already a status line
         if status_p_index < len(all_blocks) and \
