@@ -3,15 +3,22 @@
 import type { ContextFile } from '@/app/page';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileQuestion } from 'lucide-react';
+import { FileQuestion, ChevronDown, File } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import PdfViewer from './pdf-viewer'; // Import the new PdfViewer component
+import { FileUploadButton } from './file-upload-button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Button } from './ui/button';
 
 interface ContextViewerProps {
-  contextFile: ContextFile | undefined;
+    contextFile: ContextFile | undefined;
+    onContextUpload: (files: FileList) => void;
+    contextFiles: ContextFile[];
+    selectedContextFile: ContextFile | undefined;
+    onContextSelect: (fileName: string) => void;
 }
 
-export function ContextViewer({ contextFile }: ContextViewerProps) {
+export function ContextViewer({ contextFile, onContextUpload, contextFiles, selectedContextFile, onContextSelect }: ContextViewerProps) {
     const [fileUrl, setFileUrl] = useState<string>('');
 
     useEffect(() => {
@@ -39,19 +46,42 @@ export function ContextViewer({ contextFile }: ContextViewerProps) {
         );
     }
 
-  return (
-    <Card className="flex-grow flex flex-col min-h-0">
-      <CardHeader className="p-4">
-        <CardTitle className="font-headline flex items-center gap-2 text-xl">
-          Context: 
-          <span className="text-muted-foreground font-normal text-base">{contextFile?.name || 'No file selected'}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-grow flex flex-col min-h-0 p-0 px-4 pb-4">
-        <ScrollArea className="flex-grow rounded-md border bg-white overflow-auto [&>div>div]:h-full [&>div>div>div]:h-full">
-            {getDisplayContent()}
-        </ScrollArea>
-      </CardContent>
-    </Card>
-  );
+    return (
+        <Card className="flex-grow flex flex-col min-h-0">
+            <CardHeader className="p-4">
+                <div className="flex items-center justify-between">
+                    <CardTitle className="font-headline flex items-center gap-2 text-xl">
+                        Context:
+                    </CardTitle>
+                    <div className="flex gap-2">
+                        <FileUploadButton
+                            onFileSelect={(files) => onContextUpload(files as FileList)}
+                            variant="outline"
+                            multiple
+                            accept=".pdf"
+                            size="sm"
+                        >
+                            <File className="mr-2 h-4 w-4" /> Upload
+                        </FileUploadButton>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="w-full justify-between" disabled={contextFiles.length === 0}>
+                                    <span className="truncate">{selectedContextFile?.name || "Select a file"}</span>
+                                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                {contextFiles.map((file) => <DropdownMenuItem key={file.name} onSelect={() => onContextSelect(file.name)}>{file.name}</DropdownMenuItem>)}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="flex-grow flex flex-col min-h-0 p-0 px-4 pb-4">
+                <ScrollArea className="flex-grow rounded-md border bg-white overflow-auto [&>div>div]:h-full [&>div>div>div]:h-full">
+                    {getDisplayContent()}
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    );
 }

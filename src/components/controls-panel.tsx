@@ -1,112 +1,52 @@
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { ConsoleOutput } from './console-output';
-import { FileUploadButton } from './file-upload-button';
-import { FileUp, File, ChevronDown } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { ConsoleOutput } from '@/components/console-output';
 import { Button } from './ui/button';
-import type { ContextFile } from '@/app/page';
 
 interface ControlsPanelProps {
-  logs: string[];
-  onTemplateUpload: (file: File) => void;
-  onContextUpload: (files: FileList) => void;
-  contextFiles: ContextFile[];
-  selectedContextFile: ContextFile | undefined;
-  onContextSelect: (fileName: string) => void;
-  onFillDocument: () => void;
-  isProcessing: boolean;
-  onStop: () => void;
+    logs: string[];
+    onFillDocument: () => void;
+    isProcessing: boolean;
+    onStop: () => void;
 }
 
 export function ControlsPanel({
-  logs,
-  onTemplateUpload,
-  onContextUpload,
-  contextFiles,
-  selectedContextFile,
-  onContextSelect,
-  onFillDocument,
-  isProcessing,
-  onStop,
+    logs,
+    onFillDocument,
+    isProcessing,
+    onStop,
 }: ControlsPanelProps) {
-  return (
-    <Card>
-      <CardHeader className="p-4">
-        <CardTitle className="font-headline text-xl">Controls</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-0">
-        <div className="space-y-2">
-            <h3 className="text-sm font-medium mb-1">1. Upload Documents</h3>
-            <div className="grid grid-cols-2 gap-2">
-                <FileUploadButton
-                    onFileSelect={(file) => onTemplateUpload(file as File)}
-                    variant="outline"
-                    accept=".docx"
-                    size="sm"
-                >
-                    <FileUp className="mr-2 h-2 w-2" /> Template
-                </FileUploadButton>
-                <FileUploadButton
-                    onFileSelect={(files) => onContextUpload(files as FileList)}
-                    variant="outline"
-                    multiple
-                    accept=".pdf"
-                    size="sm"
-                >
-                    <File className="mr-2 h-2 w-2" /> Contexts
-                </FileUploadButton>
-            </div>
-        </div>
-        
-        <div className="space-y-2">
-            <h3 className="text-sm font-medium mb-1">2. Select Context File (Optional)</h3>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="w-full justify-between" disabled={contextFiles.length === 0}>
-                        <span className="truncate">{selectedContextFile?.name || "Select a file"}</span>
-                        <ChevronDown className="h-4 w-4 flex-shrink-0" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                    {contextFiles.map((file) => (
-                        <DropdownMenuItem key={file.name} onSelect={() => onContextSelect(file.name)}>
-                            {file.name}
-                        </DropdownMenuItem>
-                    ))}
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </div>
+    return (
+        <Card>
+            <CardContent className="space-y-4 p-4 pt-0">
+                <div className="space-y-2 pt-4">
+                    <h3 className="text-sm font-medium mb-1">Process Document</h3>
+                    {isProcessing ? (
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button size="sm" disabled>
+                                Processing...
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={onStop}
+                            >
+                                Stop
+                            </Button>
+                        </div>
+                    ) : (
+                        <Button onClick={onFillDocument} size="sm" className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                            Fill Document
+                        </Button>
+                    )}
+                </div>
 
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium mb-1">3. Process Document</h3>
-          {isProcessing ? (
-            <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" disabled>
-                Processing...
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={onStop}
-              >
-                Stop
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={onFillDocument} size="sm" className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-              Fill Document
-            </Button>
-          )}
-        </div>
+                <Separator />
 
-        <Separator />
-
-        <ConsoleOutput logs={logs} />
-      </CardContent>
-    </Card>
-  );
+                <ConsoleOutput logs={logs} />
+            </CardContent>
+        </Card>
+    );
 }

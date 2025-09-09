@@ -6,6 +6,7 @@ import * as docx from 'docx-preview';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
+import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
 import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64 } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -331,31 +332,42 @@ const Page: FC = () => {
                 <div className="lg:col-span-1 flex flex-col gap-2 min-h-0">
                     <ControlsPanel
                         logs={logs}
-                        onTemplateUpload={handleTemplateUpload}
-                        onContextUpload={handleContextUpload}
-                        contextFiles={contextFiles}
-                        selectedContextFile={selectedContextFile}
-                        onContextSelect={handleContextSelect}
                         onFillDocument={handleFillDocument}
                         isProcessing={isProcessing}
                         onStop={handleStop}
                     />
-                    <ContextViewer contextFile={selectedContextFile} />
+                    <ContextViewer
+                        contextFile={selectedContextFile}
+                        onContextUpload={handleContextUpload}
+                        contextFiles={contextFiles}
+                        selectedContextFile={selectedContextFile}
+                        onContextSelect={handleContextSelect}
+                    />
                 </div>
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                     {isDocx ? (
                         <Card className="flex-1 flex flex-col overflow-hidden">
                             <CardHeader>
-                                <CardTitle>Document Viewer</CardTitle>
+                                <div className="flex justify-between items-center">
+                                    <CardTitle>Document Viewer</CardTitle>
+                                    <FileUploadButton onFileSelect={handleTemplateUpload} size="sm" variant="outline">
+                                        Upload Template
+                                    </FileUploadButton>
+                                </div>
                             </CardHeader>
                             <CardContent ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-secondary">
                                 <DocxViewer file={templateFile} scrollContainerRef={scrollContainerRef} />
                             </CardContent>
                         </Card>
                     ) : (
-                        <TemplateEditor
-                            content={''}
-                        />
+                        <div className="flex-1 flex flex-col">
+                            <TemplateEditor content={''} />
+                            <div className="p-4 border-t">
+                                <FileUploadButton onFileSelect={handleTemplateUpload} size="sm" variant="outline">
+                                    Upload Template
+                                </FileUploadButton>
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>
