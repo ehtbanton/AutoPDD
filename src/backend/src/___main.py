@@ -35,7 +35,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 backend_dir = os.path.abspath(os.path.join(script_dir, '..'))
 
 template_doc_folder = os.path.join(backend_dir, "pdd_template")
-context_folder = os.path.join(backend_dir, "provided_documents", project_name)
+context_folder = os.path.join(backend_dir, "provided_documents")#, project_name)
 output_doc_folder = os.path.join(backend_dir, "auto_pdd_output")
 
 output_path = create_output_doc_from_template(project_name)
