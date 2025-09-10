@@ -166,3 +166,52 @@ export async function getTemplateName(): Promise<string | null> {
         return null;
     }
 }
+
+export async function updateParagraph(oldText: string, newText: string) {
+    await ensureDir(UPLOAD_DIR_OUTPUT);
+    const outputFilePath = path.join(UPLOAD_DIR_OUTPUT, OUTPUT_FILE_NAME);
+
+    const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', 'word_editor.py');
+    const pythonCwd = path.join(process.cwd(), 'src', 'backend', 'src');
+
+    const args = [pythonScriptPath, outputFilePath, oldText, newText];
+
+    const tryCommand = (command: string) => {
+        return new Promise<string>((resolve, reject) => {
+            const process = spawn(command, args, { cwd: pythonCwd, shell: true });
+
+            let stdout = '';
+            let stderr = '';
+
+            process.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            process.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            process.on('close', (code) => {
+                if (code === 0 && stdout.trim() === 'SUCCESS') {
+                    resolve(stdout);
+                } else {
+                    reject(new Error(`Exit code: ${code}\nStderr: ${stderr}\nStdout: ${stdout}`));
+                }
+            });
+
+            process.on('error', (err) => {
+                reject(err);
+            });
+        });
+    };
+
+    try {
+        return await tryCommand('python');
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            // If 'python' is not found, try 'python3'
+            return await tryCommand('python3');
+        }
+        throw error;
+    }
+}

@@ -6,6 +6,7 @@ from docx.oxml.text.paragraph import CT_P
 from docx.oxml.table import CT_Tbl
 from docx.oxml import OxmlElement # <--- ADD THIS IMPORT
 from docx.text.paragraph import Paragraph # <--- ADD THIS IMPORT
+import sys
 
 # --- HELPER FUNCTIONS ---
 def _iter_block_items(parent):
@@ -181,3 +182,28 @@ def replace_section_in_word_doc(doc_path, start_marker, end_marker, ai_json_data
 
     except Exception as e:
         print(f"FATAL ERROR during document generation for section '{start_marker}': {e}")
+
+def replace_paragraph(doc_path, old_text, new_text):
+    try:
+        doc = docx.Document(doc_path)
+        for block in _iter_block_items(doc):
+            if isinstance(block, docx.text.paragraph.Paragraph):
+                if block.text.strip() == old_text.strip():
+                    for run in block.runs:
+                        run.clear()
+                    block.add_run(new_text)
+        doc.save(doc_path)
+        return True
+    except Exception as e:
+        print(f"Error replacing paragraph: {e}")
+        return False
+
+if __name__ == '__main__':
+    if len(sys.argv) == 4:
+        doc_path = sys.argv[1]
+        old_text = sys.argv[2]
+        new_text = sys.argv[3]
+        if replace_paragraph(doc_path, old_text, new_text):
+            print("SUCCESS")
+        else:
+            print("FAILURE")

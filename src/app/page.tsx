@@ -8,10 +8,12 @@ import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+
 
 export type ContextFile = {
     name: string;
@@ -66,6 +68,8 @@ const Page: FC = () => {
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const initialLoadDone = useRef(false);
+    const [editingPara, setEditingPara] = useState<{ text: string; top: number; left: number, width: number } | null>(null);
+    const [editedText, setEditedText] = useState('');
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -367,6 +371,67 @@ const Page: FC = () => {
         }
     }
 
+    const handleDocClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (editingPara) {
+            handleCancelEdit();
+            return;
+        }
+
+        const target = e.target as HTMLElement;
+        const p = target.closest('p');
+        if (p) {
+            const containerRect = scrollContainerRef.current!.getBoundingClientRect();
+            const pRect = p.getBoundingClientRect();
+            setEditingPara({
+                text: p.innerText,
+                top: pRect.top - containerRect.top + scrollContainerRef.current!.scrollTop,
+                left: pRect.left - containerRect.left,
+                width: pRect.width,
+            });
+            setEditedText(p.innerText);
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        if (editingPara) {
+            try {
+                log(`Updating text: "${editingPara.text}" to "${editedText}"`);
+                await updateParagraph(editingPara.text, editedText);
+                log("Update successful. Refreshing viewer.");
+                setEditingPara(null);
+                await updateOutputViewer();
+                toast({
+                    title: "Update Successful",
+                    description: "The paragraph has been updated.",
+                });
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                log(`Error updating paragraph: ${errorMessage}`);
+                toast({
+                    title: "Update Failed",
+                    description: "Could not update the paragraph.",
+                    variant: "destructive",
+                });
+            }
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingPara(null);
+    };
+
+    const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSaveEdit();
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancelEdit();
+        }
+    };
+
+
     return (
         <main className="h-full flex flex-col p-4 gap-4 bg-background">
             <header className="flex items-baseline mb-2">
@@ -410,8 +475,27 @@ const Page: FC = () => {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-secondary">
+                            <CardContent ref={scrollContainerRef} className="relative flex-1 overflow-y-auto p-4 bg-secondary" onClick={handleDocClick}>
                                 <DocxViewer file={templateFile} scrollContainerRef={scrollContainerRef} />
+                                {editingPara && (
+                                    <div
+                                        style={{ top: editingPara.top, left: editingPara.left, width: editingPara.width }}
+                                        className="absolute z-10"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <Textarea
+                                            value={editedText}
+                                            onChange={(e) => setEditedText(e.target.value)}
+                                            onKeyDown={handleTextareaKeyDown}
+                                            className="bg-white p-2 border border-gray-400 rounded-md shadow-lg w-full"
+                                            autoFocus
+                                        />
+                                        <div className="flex justify-end gap-2 mt-2">
+                                            <Button onClick={handleSaveEdit} size="sm">Save (Enter)</Button>
+                                            <Button onClick={handleCancelEdit} size="sm" variant="outline">Cancel (Esc)</Button>
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     ) : (

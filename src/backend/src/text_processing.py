@@ -1,7 +1,7 @@
 import json
 
 def retrieve_contents_list(template_text: str) -> str:
-    return template_text[template_text.find("Contents"):template_text.find("Appendix")].strip()
+    return template_text[template_text.find("Contents"):template_text.find("CONTENTS_END")].strip()
 
 def get_pdd_targets(contents_list):
     pdd_targets = []
