@@ -97,74 +97,72 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
             print(f"  > WARNING: Start marker '{start_marker}' not found.")
             return
 
-        # Handle status paragraph (same as before)
-        status_p_index = start_index + 1
-        if status_p_index < len(all_blocks) and \
-           isinstance(all_blocks[status_p_index], docx.text.paragraph.Paragraph) and \
-           "SECTION_" in all_blocks[status_p_index].text:
-            all_blocks[status_p_index].text = status
-        else:
-            heading_paragraph = all_blocks[start_index]
-            p_element = heading_paragraph._p
-            p_element.addnext(OxmlElement("w:p"))
-            new_para = Paragraph(p_element.getnext(), heading_paragraph._parent)
-            new_para.text = status
-
-        # Clear existing section content (but keep the heading and status)
-        section_start = start_index + 2  # Skip heading and status
-        elements_to_remove = []
+        # Get the heading paragraph for reference
+        heading_paragraph = all_blocks[start_index]
         
-        for i in range(section_start, end_index):
+        # Find and remove all existing content between start and end markers
+        # We need to preserve the heading but remove everything else
+        elements_to_remove = []
+        for i in range(start_index + 1, end_index):
             if i < len(all_blocks):
                 elements_to_remove.append(all_blocks[i])
 
-        # Remove old content
+        # Remove all existing content in the section
         for element in elements_to_remove:
             if hasattr(element, '_element'):
                 element._element.getparent().remove(element._element)
 
+        # Now insert the status paragraph right after the heading
+        heading_element = heading_paragraph._element
+        status_para_element = OxmlElement("w:p")
+        heading_element.addnext(status_para_element)
+        status_para = Paragraph(status_para_element, doc)
+        status_para.text = status
+        
+        # Use the status paragraph as our insertion point for the rest of the content
+        insert_position = status_para_element
+
         # Parse and insert new content
-        content_lines = new_content.split('\n')
-        insert_position = all_blocks[start_index]._element  # Reference element for insertion
-        
-        current_table_lines = []
-        
-        for line in content_lines:
-            line_stripped = line.strip()
+        if new_content and new_content.strip():
+            content_lines = new_content.split('\n')
+            current_table_lines = []
             
-            if line_stripped.startswith('|') and line_stripped.endswith('|'):
-                # This is part of a table
-                current_table_lines.append(line)
-            else:
-                # Not a table line - process any pending table first
-                if current_table_lines:
-                    table_text = '\n'.join(current_table_lines)
-                    table = markdown_to_word_table(doc, table_text)
-                    if table:
-                        # Insert table after our reference position
-                        insert_position.addnext(table._element)
-                        insert_position = table._element
-                    current_table_lines = []
+            for line in content_lines:
+                line_stripped = line.strip()
                 
-                # Add paragraph if it has content
-                if line_stripped and not line_stripped.startswith('#'):
-                    new_para_element = OxmlElement("w:p")
-                    insert_position.addnext(new_para_element)
-                    new_para = Paragraph(new_para_element, doc)
-                    new_para.text = line_stripped
-                    insert_position = new_para_element
-                elif not line_stripped:
-                    # Empty line - add empty paragraph for spacing
-                    new_para_element = OxmlElement("w:p")
-                    insert_position.addnext(new_para_element)
-                    insert_position = new_para_element
-        
-        # Handle any remaining table at the end
-        if current_table_lines:
-            table_text = '\n'.join(current_table_lines)
-            table = markdown_to_word_table(doc, table_text)
-            if table:
-                insert_position.addnext(table._element)
+                if line_stripped.startswith('|') and line_stripped.endswith('|'):
+                    # This is part of a table
+                    current_table_lines.append(line)
+                else:
+                    # Not a table line - process any pending table first
+                    if current_table_lines:
+                        table_text = '\n'.join(current_table_lines)
+                        table = markdown_to_word_table(doc, table_text)
+                        if table:
+                            # Insert table after our reference position
+                            insert_position.addnext(table._element)
+                            insert_position = table._element
+                        current_table_lines = []
+                    
+                    # Add paragraph if it has content
+                    if line_stripped and not line_stripped.startswith('#'):
+                        new_para_element = OxmlElement("w:p")
+                        insert_position.addnext(new_para_element)
+                        new_para = Paragraph(new_para_element, doc)
+                        new_para.text = line_stripped
+                        insert_position = new_para_element
+                    elif not line_stripped:
+                        # Empty line - add empty paragraph for spacing
+                        new_para_element = OxmlElement("w:p")
+                        insert_position.addnext(new_para_element)
+                        insert_position = new_para_element
+            
+            # Handle any remaining table at the end
+            if current_table_lines:
+                table_text = '\n'.join(current_table_lines)
+                table = markdown_to_word_table(doc, table_text)
+                if table:
+                    insert_position.addnext(table._element)
 
         doc.save(doc_path)
         print(f"Successfully replaced section '{start_marker}' content in {os.path.basename(doc_path)}.")
