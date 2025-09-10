@@ -1,4 +1,5 @@
 import json
+import re
 
 def retrieve_contents_list(template_text: str) -> str:
     return template_text[template_text.find("Contents"):template_text.find("Appendix")].strip()
@@ -28,57 +29,142 @@ def find_target_location(target,template_text):
     if start_location == -1: start_location = template_text.find(target[1])
     return start_location
 
-def assemble_user_prompt(infilling_info):
-    return f"""
-Analyze the following section from a document template. For each field, placeholder, or table cell, find the corresponding information in the provided source documents.
+def convert_word_tables_to_markdown(text):
+    """Convert Word document table format to markdown tables"""
+    lines = text.split('\n')
+    result_lines = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].strip()
+        # Check if this looks like a table row (starts and ends with |)
+        if line.startswith('|') and line.endswith('|'):
+            table_lines = []
+            # Collect all consecutive table lines
+            while i < len(lines) and lines[i].strip().startswith('|') and lines[i].strip().endswith('|'):
+                table_lines.append(lines[i].strip())
+                i += 1
+            
+            if len(table_lines) >= 2:  # We have at least header and separator
+                # Add the table lines as-is (they're already in markdown format)
+                result_lines.extend(table_lines)
+            else:
+                # Not a proper table, add as regular lines
+                result_lines.extend(table_lines)
+        else:
+            result_lines.append(lines[i])
+            i += 1
+    
+    return '\n'.join(result_lines)
 
-Template Section to Extract Data For:
+def extract_section_format(infilling_info):
+    """Extract the structural format/template of a section for the AI to follow"""
+    # Convert any existing tables to markdown format
+    markdown_content = convert_word_tables_to_markdown(infilling_info)
+    
+    # Create a template that shows the structure
+    format_template = []
+    lines = markdown_content.split('\n')
+    
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            format_template.append("")
+        elif stripped.startswith('#'):
+            # Heading
+            format_template.append(line)
+        elif stripped.startswith('|') and stripped.endswith('|'):
+            # Table row - preserve the structure but indicate it needs filling
+            if '---' in stripped:
+                format_template.append(line)  # Keep separator as-is
+            else:
+                # Replace content with placeholder indicators
+                cells = [cell.strip() for cell in stripped.split('|')[1:-1]]
+                if any(cell and not any(char.isalpha() for char in cell) for cell in cells[1:]):
+                    # This looks like a data row (has empty or non-text cells)
+                    new_cells = []
+                    for i, cell in enumerate(cells):
+                        if i == 0:
+                            new_cells.append(cell)  # Keep row label
+                        else:
+                            new_cells.append("[TO_FILL]")  # Mark as needing content
+                    format_template.append("| " + " | ".join(new_cells) + " |")
+                else:
+                    format_template.append(line)  # Keep header row as-is
+        else:
+            # Regular paragraph - check if it contains placeholders or looks like a template
+            if any(marker in stripped for marker in ["[", "_____", "...", "TBD", "N/A"]):
+                format_template.append("[PARAGRAPH_TO_FILL]")
+            else:
+                format_template.append(line)
+    
+    return '\n'.join(format_template)
+
+def assemble_user_prompt(infilling_info):
+    section_format = extract_section_format(infilling_info)
+    
+    return f"""
+Please fill in the following document section using information from the provided source documents.
+
+SECTION TO COMPLETE:
 ---
 {infilling_info}
 ---
 
-Your task is to return a single JSON object as instructed in the system prompt.
+IMPORTANT INSTRUCTIONS:
+1. Your output should follow the EXACT same structure and formatting as the section above
+2. Replace any placeholders, empty cells, or "[TO_FILL]" markers with appropriate content from the source documents
+3. Maintain all headings, paragraph structure, and table formatting exactly as shown
+4. For tables: keep the same number of columns and rows, only fill in the data cells
+5. For paragraphs marked as "[PARAGRAPH_TO_FILL]": write complete, relevant paragraphs
+6. If you cannot find information for a specific field, use "INFO_NOT_FOUND" as the value
+7. Do not add any content outside the section structure provided
+
+Your response should be the completed section, ready to replace the original template section.
 """
 
 def assemble_system_prompt():
-    system_prompt = """You are a document analysis assistant. Your entire output MUST BE A SINGLE, VALID JSON OBJECT with a flat key-value structure.
+    return """You are a document completion assistant. Your task is to fill in template sections with information from provided source documents.
 
-CRITICAL JSON RULES:
-1.  **JSON ONLY:** Your response MUST start with `{` and end with `}`. Do not include any text or markdown outside the JSON object.
-2.  **FLAT STRUCTURE:** Do NOT nest JSON objects or use lists. Every piece of information must be a direct key-value pair in the main JSON object.
-3.  **VALUE OBJECT:** The value for every key MUST be an object containing exactly two keys: "value" and "source".
-4.  **MISSING INFORMATION:** If information is not found, the "value" must be the string "INFO_NOT_FOUND", and the "source" must be "N/A".
+KEY REQUIREMENTS:
+1. **PRESERVE EXACT STRUCTURE**: Your output must maintain the identical structure of the input section
+2. **MARKDOWN TABLES**: Keep all tables in markdown format (| column | column |)  
+3. **NO ADDITIONAL CONTENT**: Do not add explanations, comments, or content outside the section structure
+4. **COMPLETE SECTIONS**: Fill in all placeholders, empty cells, and template markers with relevant information
+5. **MISSING INFO**: Use "INFO_NOT_FOUND" when specific information cannot be found in source documents
+6. **MAINTAIN FORMATTING**: Keep all headings, spacing, and structural elements exactly as provided
 
-KEY NAMING CONVENTIONS:
--   **For simple paragraphs or placeholders:** The JSON key should be a concise description of the information requested (e.g., "Organization name").
--   **For TABLES:** This is critical. For each cell in a table that needs to be filled, create a unique key by combining the table's main title, the context from the cell's row (usually the text in the first column), and the text from the cell's column header.
-    -   **FORMAT:** "Table Title: Row Context - Column Header"
-    -   **EXAMPLE:** For the 'Audit History' table, a cell in the 'Validation' row under the 'Period' column should have the key "Audit History: Validation/verification - Period".
--   **For 2-COLUMN KEY-VALUE TABLES:** For simple tables with a label in the first column and a value in the second, the key should be the label from the first column.
-    -   **EXAMPLE:** For a row with "Sectoral scope" in the first column, the key should simply be "Sectoral scope".
+Your entire response should be the completed section, properly formatted and ready for direct insertion into the document."""
 
-EXAMPLE OF A PERFECT (FLAT) RESPONSE:
-{
-  "Organization name": { "value": "Prime Road Alternative (Cambodia) Company Limited", "source": "doc1.pdf" },
-  "Audit History: Validation/verification - Period": { "value": "24-March-2021", "source": "doc2.pdf" },
-  "Audit History: Validation/verification - Program": { "value": "VCS", "source": "doc2.pdf" },
-  "Sectoral scope": { "value": "Energy", "source": "doc1.pdf" }
-}
-"""
-    return system_prompt
-
-def parse_ai_json_response(response_text):
-    """Safely parses the AI's string response into a Python dictionary."""
-    try:
-        response_cleaned = response_text.strip()
-        if response_cleaned.startswith("```json"):
-            response_cleaned = response_cleaned[7:]
-        if response_cleaned.endswith("```"):
-            response_cleaned = response_cleaned[:-3]
-        return json.loads(response_cleaned)
-    except json.JSONDecodeError:
-        print("  > !!! CRITICAL PARSE ERROR: AI did not return valid JSON.")
-        return None
+def parse_ai_response_as_section(response_text):
+    """Parse the AI response as complete section content rather than JSON"""
+    # Clean up any markdown code blocks if present
+    response_cleaned = response_text.strip()
+    if response_cleaned.startswith("```"):
+        lines = response_cleaned.split('\n')
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines[-1].strip() == "```":
+            lines = lines[:-1]
+        response_cleaned = '\n'.join(lines)
+    
+    return response_cleaned.strip()
 
 def is_valid_response(response, infilling_info):
+    """Validate that the response maintains the expected structure"""
+    # Basic validation - check if response has similar structure to input
+    response_lines = len(response.split('\n'))
+    info_lines = len(infilling_info.split('\n'))
+    
+    # Allow some flexibility but ensure it's not drastically different
+    if response_lines < info_lines * 0.5 or response_lines > info_lines * 2:
+        return False
+    
+    # Check for markdown table consistency if original had tables
+    info_has_tables = '|' in infilling_info
+    response_has_tables = '|' in response
+    
+    if info_has_tables and not response_has_tables:
+        return False
+    
     return True

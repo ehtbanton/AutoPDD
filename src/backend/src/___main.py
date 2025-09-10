@@ -1,29 +1,20 @@
-
 # Welcome to AutoPDD!
 
 # Todo list:
 # - Fill in basic functionality (see detailed comments in this file).
 # - Check possibility of using somebody's MCP protocol for LLM processing inputs/outputs
-#       WE ARE HERE. Current status: 
-#           We are text-only. Yay! But there's A) a lot of unnecessary context being provided, and B) inconsistent infilling.
-#           The app now has the ability to process info only if needed, and call out if it requires more context.
-
-#           Functionality is basic rn - just redo a section if it wasn't previously completed. This ought to be fixed so we just re-check only
-#           any new files for only any INFO_NOT_FOUNDs. And then also more mechanical context use in general.
-#           
-#           So, may be worth investigating MCP. What we want is hard-coded ways for Gemini to get what it needs in a single prompt:
-#               - List of info requested
-#               - Consistently structured output
-#               - Locations of any info it has found (for checking during development - as hallucinations are bound to happen)
-#           
-#           I'm going to also start looking at algorithmic methods to improve attention with longer contexts.
+#       UPDATED STATUS: 
+#           Now using complete section generation approach instead of field-by-field JSON extraction.
+#           AI generates complete section content that matches template structure, including markdown tables.
+#           This should provide better consistency and easier content generation.
 
 import os
 import sys
 from gemini_interface import setup_gemini, ask_gemini, upload_files_to_gemini
 from context_manager import extract_text_from_folder
-from text_processing import retrieve_contents_list, get_pdd_targets, find_target_location, assemble_system_prompt, assemble_user_prompt, is_valid_response, parse_ai_json_response
-from word_editor import load_word_doc_to_string, create_output_doc_from_template, replace_section_in_word_doc
+from text_processing import retrieve_contents_list, get_pdd_targets, find_target_location
+from word_editor import load_word_doc_to_string, create_output_doc_from_template
+from word_section_replacer import replace_section_content, check_for_info_not_found
 from _section_filler import fill_section, refill_section
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -57,24 +48,30 @@ for target_idx, target in enumerate(pdd_targets):
     else:
         end_marker = "Appendix"
 
+    # Get the template section content
     template_start_loc = find_target_location(target, template_text)
     template_end_loc = find_target_location(pdd_targets[target_idx + 1], template_text) if target_idx + 1 < len(pdd_targets) else -1
     infilling_info = template_text[template_start_loc:template_end_loc] if template_end_loc != -1 else template_text[template_start_loc:]
 
-    output_start_loc = find_target_location(target, output_text)
-    output_end_loc = find_target_location(pdd_targets[target_idx + 1], output_text) if target_idx + 1 < len(pdd_targets) else -1
+    # Check current output status
+    output_start_loc = find_target_location(target, output_text) if output_text else -1
+    output_end_loc = find_target_location(pdd_targets[target_idx + 1], output_text) if output_text and target_idx + 1 < len(pdd_targets) else -1
     
     response = None
     section_status = ""
+    current_section_content = ""
+    
     if output_text and output_start_loc != -1:
-        section_text = output_text[output_start_loc:output_end_loc]
-        if section_text and len(section_text.split("\n")) > 2:
-            section_status = section_text.split("\n")[2]
+        current_section_content = output_text[output_start_loc:output_end_loc] if output_end_loc != -1 else output_text[output_start_loc:]
+        if current_section_content and len(current_section_content.split("\n")) > 2:
+            section_status = current_section_content.split("\n")[2]
 
+    # Determine what action to take
     if "SECTION_COMPLETE" in section_status:
         print(f"\nSection '{start_marker}' is already complete. Skipping...")
         sys.stdout.flush()
         continue
+    
     if "SECTION_ATTEMPTED" in section_status:
         if not there_are_new_files:
             print(f"\nSection '{start_marker}' has previously been attempted and no new files are available. Skipping...")
@@ -84,31 +81,31 @@ for target_idx, target in enumerate(pdd_targets):
         sys.stdout.flush()
         response = refill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache)
     
+    # Generate section content
     if not response:
         print(f"\n{'='*20}\nProcessing section: {start_marker}\n{'='*20}")
         sys.stdout.flush()
         response = fill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache)
 
-    print("\n--- Raw AI Response ---")
+    print("\n--- AI Generated Section Content ---")
     print(response)
-    print("-----------------------\n")
+    print("----------------------------------------\n")
     sys.stdout.flush()
 
-    ai_json_data = parse_ai_json_response(response)
-
-    if not ai_json_data:
-        print(f"CRITICAL: Failed to parse JSON for section '{start_marker}'. Skipping update.")
-        replace_section_in_word_doc(output_path, start_marker, end_marker, {}, "SECTION_FAILED_PARSE")
+    if not response or response.strip() == "":
+        print(f"CRITICAL: No content generated for section '{start_marker}'. Skipping update.")
+        replace_section_content(output_path, start_marker, end_marker, "", "SECTION_FAILED_GENERATION")
         continue
 
-    info_not_found = any(data.get("value") == "INFO_NOT_FOUND" for data in ai_json_data.values())
-    
+    # Check if there are any INFO_NOT_FOUND markers in the response
+    info_not_found = check_for_info_not_found(response)
     final_status = "SECTION_ATTEMPTED" if info_not_found else "SECTION_COMPLETE"
     
     print(f"Section status determined as: {final_status}")
     sys.stdout.flush()
     
-    replace_section_in_word_doc(output_path, start_marker, end_marker, ai_json_data, final_status)
+    # Replace the section content in the Word document
+    replace_section_content(output_path, start_marker, end_marker, response, final_status)
 
 print(f"\nProcessing complete. The final document has been saved at: {output_path}\n")
 sys.stdout.flush()
