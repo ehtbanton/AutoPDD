@@ -215,3 +215,64 @@ export async function updateParagraph(oldText: string, newText: string) {
         throw error;
     }
 }
+
+export interface PDDSection {
+    sectionHeading: string;
+    subheading: string;
+    subheadingIdx: string;
+    pageNum: string;
+    status: 'SECTION_COMPLETE' | 'SECTION_ATTEMPTED' | 'PENDING';
+}
+
+export async function getSections(): Promise<PDDSection[]> {
+    const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', 'section_extractor.py');
+    const pythonCwd = path.join(process.cwd(), 'src', 'backend', 'src');
+
+    const tryCommand = (command: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const process = spawn(command, [pythonScriptPath], { cwd: pythonCwd });
+
+            let stdout = '';
+            let stderr = '';
+
+            process.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            process.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            process.on('close', (code) => {
+                if (code === 0) {
+                    resolve(stdout.trim());
+                } else {
+                    reject(new Error(`Exit code: ${code}\nStderr: ${stderr}\nStdout: ${stdout}`));
+                }
+            });
+
+            process.on('error', (err) => {
+                reject(err);
+            });
+        });
+    };
+
+    try {
+        const output = await tryCommand('python');
+        const sections: PDDSection[] = JSON.parse(output);
+        return sections;
+    } catch (error: any) {
+        if (error.code === 'ENOENT') {
+            try {
+                const output = await tryCommand('python3');
+                const sections: PDDSection[] = JSON.parse(output);
+                return sections;
+            } catch (fallbackError) {
+                console.error('Error extracting sections:', fallbackError);
+                return [];
+            }
+        }
+        console.error('Error extracting sections:', error);
+        return [];
+    }
+}

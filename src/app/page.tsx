@@ -6,9 +6,10 @@ import * as docx from 'docx-preview';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
+import { SectionsPanel, PDDSection } from '@/components/sections-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, getSections } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -70,12 +71,25 @@ const Page: FC = () => {
     const initialLoadDone = useRef(false);
     const [editingPara, setEditingPara] = useState<{ text: string; top: number; left: number, width: number } | null>(null);
     const [editedText, setEditedText] = useState('');
+    const [sections, setSections] = useState<PDDSection[]>([]);
+    const [processingSection, setProcessingSection] = useState<string | undefined>(undefined);
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
         setLogs((prevLogs) => [...prevLogs, timedMessage]);
         console.log(timedMessage);
     }, []);
+
+    const loadSections = useCallback(async () => {
+        try {
+            const sectionsData = await getSections();
+            setSections(sectionsData);
+            log(`Loaded ${sectionsData.length} sections from template.`);
+        } catch (error) {
+            console.error("Failed to load sections:", error);
+            setSections([]);
+        }
+    }, [log]);
 
     const updateOutputViewer = useCallback(async () => {
         try {
@@ -96,11 +110,14 @@ const Page: FC = () => {
             } else {
                 setTemplateFile(null);
             }
+            
+            // Reload sections to update their status
+            await loadSections();
         } catch (error) {
             console.error("Failed to update output viewer:", error);
             setTemplateFile(null);
         }
-    }, [lastTemplateBase64, setLastTemplateBase64, setTemplateFile, setIsDocx]);
+    }, [lastTemplateBase64, setLastTemplateBase64, setTemplateFile, setIsDocx, loadSections]);
 
     useEffect(() => {
         if (initialLoadDone.current) {
@@ -143,6 +160,7 @@ const Page: FC = () => {
             try {
                 await uploadTemplateFile(file.name, buffer.toString('base64'));
                 await updateOutputViewer();
+                await loadSections();
                 setTemplatePath(file.name);
                 log(`Template "${file.name}" uploaded for processing.`);
                 toast({
@@ -318,10 +336,18 @@ const Page: FC = () => {
     const handleStop = () => {
         log("Stop button pressed. Attempting to stop processing...");
         processingRef.current = false;
+        setProcessingSection(undefined);
         if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
         }
+    };
+
+    const handleFillSection = async (section: PDDSection) => {
+        log(`Processing section: ${section.subheading}...`);
+        setProcessingSection(section.subheading);
+        // TODO: Implement individual section processing
+        // This will be implemented when we add the communication protocol
     };
 
     const handleResetTemplate = async () => {
@@ -442,14 +468,10 @@ const Page: FC = () => {
                     Fill in your PDD automatically using a bundle of provided PDF files
                 </p>
             </header>
-            <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+            <div className="flex-grow grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
+                {/* Left Column: Controls & Context */}
                 <div className="lg:col-span-1 flex flex-col gap-2 min-h-0">
-                    <ControlsPanel
-                        logs={logs}
-                        onFillDocument={handleFillDocument}
-                        isProcessing={isProcessing}
-                        onStop={handleStop}
-                    />
+                    <ControlsPanel logs={logs} />
                     <ContextViewer
                         contextFile={selectedContextFile}
                         onContextUpload={handleContextUpload}
@@ -459,6 +481,7 @@ const Page: FC = () => {
                         onRemoveAllContexts={handleRemoveAllContexts}
                     />
                 </div>
+                {/* Center Column: Document Viewer */}
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                     {isDocx ? (
                         <Card className="flex-1 flex flex-col overflow-hidden">
@@ -508,6 +531,17 @@ const Page: FC = () => {
                             </div>
                         </div>
                     )}
+                </div>
+                {/* Right Column: Sections Panel */}
+                <div className="lg:col-span-1 flex flex-col min-h-0">
+                    <SectionsPanel
+                        sections={sections}
+                        onFillEntireDocument={handleFillDocument}
+                        onFillSection={handleFillSection}
+                        isProcessing={isProcessing}
+                        onStop={handleStop}
+                        processingSection={processingSection}
+                    />
                 </div>
             </div>
         </main>

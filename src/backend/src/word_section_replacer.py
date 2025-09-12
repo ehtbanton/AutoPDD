@@ -175,3 +175,31 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
 def check_for_info_not_found(content):
     """Check if the section content contains any INFO_NOT_FOUND markers"""
     return "INFO_NOT_FOUND" in content
+
+def check_section_status(document_text, section_heading):
+    """Check the status of a section in the document text"""
+    try:
+        # Find the section in the document
+        section_start = document_text.find(section_heading)
+        if section_start == -1:
+            return 'PENDING'
+        
+        # Look for the status line (should be a few lines after the heading)
+        lines = document_text[section_start:].split('\n')[:10]  # Check first 10 lines after heading
+        
+        for line in lines:
+            line_stripped = line.strip()
+            if 'SECTION_COMPLETE' in line_stripped:
+                return 'SECTION_COMPLETE'
+            elif 'SECTION_ATTEMPTED' in line_stripped:
+                return 'SECTION_ATTEMPTED'
+        
+        # If we found the section but no status, check if it has meaningful content
+        # If there are more than 2 lines after the heading, it's probably been attempted
+        if len([l for l in lines if l.strip()]) > 2:
+            return 'SECTION_ATTEMPTED'
+        
+        return 'PENDING'
+        
+    except Exception:
+        return 'PENDING'
