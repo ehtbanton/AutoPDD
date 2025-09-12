@@ -108,3 +108,58 @@ def replace_section_in_word_doc(doc_path, start_marker, end_marker, ai_markdown_
     # ...
 
     doc.save(doc_path)
+
+
+def replace_paragraph_text(doc, old_text, new_text):
+    """
+    Finds and replaces the text in a paragraph, preserving the original formatting.
+    This function iterates through all paragraphs in the document, including those within tables.
+    """
+    for p in doc.paragraphs:
+        if p.text.strip() == old_text.strip():
+            # Clear existing runs in the paragraph
+            for run in p.runs:
+                run.clear()
+            # Add a new run with the new text, preserving the paragraph's style
+            p.add_run(new_text)
+            return True # Indicate success
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    if p.text.strip() == old_text.strip():
+                        for run in p.runs:
+                            run.clear()
+                        p.add_run(new_text)
+                        return True # Indicate success
+    return False # Indicate that the text was not found
+
+if __name__ == '__main__':
+    # For debugging: print the received arguments
+    # print(f"Received arguments: {sys.argv}")
+    
+    if len(sys.argv) != 4:
+        print("Usage: python word_editor.py <doc_path> <old_text> <new_text>")
+        print(f"Error: Expected 4 arguments, but received {len(sys.argv)}.")
+        sys.exit(1)
+
+    doc_path = sys.argv[1]
+    old_text = sys.argv[2]
+    new_text = sys.argv[3]
+
+    if not os.path.exists(doc_path):
+        print(f"Error: Document not found at '{doc_path}'")
+        sys.exit(1)
+
+    try:
+        document = docx.Document(doc_path)
+        if replace_paragraph_text(document, old_text, new_text):
+            document.save(doc_path)
+            print("SUCCESS")
+        else:
+            print(f"Error: Could not find the paragraph with the text: '{old_text}'")
+            sys.exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        sys.exit(1)

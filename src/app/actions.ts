@@ -178,7 +178,7 @@ export async function updateParagraph(oldText: string, newText: string) {
 
     const tryCommand = (command: string) => {
         return new Promise<string>((resolve, reject) => {
-            const process = spawn(command, args, { cwd: pythonCwd, shell: true });
+            const process = spawn(command, args, { cwd: pythonCwd});
 
             let stdout = '';
             let stderr = '';
