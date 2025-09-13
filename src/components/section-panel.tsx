@@ -60,7 +60,7 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
                 return 'text-orange-600';
             case 'UNATTEMPTED':
             default:
-                return 'text-gray-600';
+                return 'text-blue-600'; // Changed from gray to blue for better visibility
         }
     };
 

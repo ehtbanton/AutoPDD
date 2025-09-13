@@ -9,7 +9,7 @@ import { ControlsPanel } from '@/components/controls-panel';
 import { SectionPanel } from '@/components/section-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections, processSection, processAllSections, type SectionWithStatus } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections, processSection, processAllSections, reinitializeBackend, type SectionWithStatus } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -91,12 +91,13 @@ const Page: FC = () => {
             const sectionsFromBackend = await fetchSections();
 
             if (sectionsFromBackend.length > 0) {
+                log(`Received ${sectionsFromBackend.length} sections from backend`);
                 const sectionsWithStatus: SectionStatus[] = sectionsFromBackend.map(section => ({
                     name: section.name,
                     status: mapBackendStatusToFrontend(section.status)
                 }));
                 setSections(sectionsWithStatus);
-                log(`Loaded ${sectionsFromBackend.length} sections from template.`);
+                log(`Loaded ${sectionsFromBackend.length} sections from template. First section: "${sectionsWithStatus[0]?.name}" with status: ${sectionsWithStatus[0]?.status}`);
             } else {
                 setSections([]);
                 log("No sections found in template or backend not available.");
@@ -189,6 +190,16 @@ const Page: FC = () => {
                 await updateOutputViewer();
                 setTemplatePath(file.name);
                 log(`Template "${file.name}" uploaded for processing.`);
+
+                // Reinitialize backend to refresh sections
+                log("Reinitializing backend to detect sections...");
+                const reinitResult = await reinitializeBackend();
+                if (reinitResult.success) {
+                    log(`Backend reinitialized successfully. Found ${reinitResult.sections_count || 0} sections.`);
+                } else {
+                    log(`Warning: Backend reinitialize failed: ${reinitResult.message}`);
+                }
+
                 await loadSections();
                 toast({
                     title: "Upload Successful",

@@ -164,6 +164,23 @@ def process_section(section_name: str):
         for target in PDD_TARGETS:
             print(f"  - {target[1]}")
 
+def get_initialized_status():
+    """Get current initialization status."""
+    return INITIALIZED
+
+def get_current_pdd_targets():
+    """Get current PDD_TARGETS list."""
+    return PDD_TARGETS
+
+def get_all_globals():
+    """Get all current global state for debugging."""
+    return {
+        'INITIALIZED': INITIALIZED,
+        'PDD_TARGETS_COUNT': len(PDD_TARGETS) if PDD_TARGETS else 0,
+        'OUTPUT_PATH': OUTPUT_PATH,
+        'PROJECT_NAME': PROJECT_NAME
+    }
+
 def main_interactive_loop():
     """Interactive command loop that waits for user commands."""
     print("\nAutoPDD Interactive Mode")

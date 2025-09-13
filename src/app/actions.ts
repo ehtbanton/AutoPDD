@@ -308,3 +308,32 @@ export async function processAllSections(): Promise<{ success: boolean; message:
         };
     }
 }
+
+export async function reinitializeBackend(): Promise<{ success: boolean; message: string; sections_count?: number }> {
+    try {
+        const response = await fetch('http://localhost:5000/reinitialize', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return {
+            success: data.success || false,
+            message: data.message || 'Backend reinitialized',
+            sections_count: data.sections_count
+        };
+    } catch (error) {
+        console.error('Error reinitializing backend:', error);
+        return {
+            success: false,
+            message: `Error reinitializing backend: ${error instanceof Error ? error.message : String(error)}`
+        };
+    }
+}

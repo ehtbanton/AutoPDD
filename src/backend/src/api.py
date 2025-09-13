@@ -7,7 +7,7 @@ import threading
 import logging
 
 # Import functions from the refactored backend
-from ___main import initialize, process_document, process_section, PDD_TARGETS, INITIALIZED, OUTPUT_TEXT, OUTPUT_PATH
+from ___main import initialize, process_document, process_section, get_initialized_status, get_current_pdd_targets, get_all_globals
 from text_processing import find_target_location
 from word_editor import load_word_doc_to_string
 import os
@@ -84,40 +84,53 @@ def get_section_status(section_name):
         logger.error(f"Error getting section status for '{section_name}': {str(e)}")
         return 'untouched'
 
-@app.before_first_request
-def setup_backend():
-    """Initialize the backend when Flask starts."""
-    try:
-        initialize()
-        logger.info("Backend initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize backend: {str(e)}")
-        raise
+# Initialize backend when the module is imported (only once)
+try:
+    initialize()
+    logger.info("Backend initialized successfully on startup")
+except Exception as e:
+    logger.error(f"Failed to initialize backend on startup: {str(e)}")
+    # Don't raise here, let the app start and handle errors in endpoints
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint."""
+    initialized = get_initialized_status()
+    pdd_targets = get_current_pdd_targets()
+    globals_info = get_all_globals()
+
+    logger.info(f"Health check - INITIALIZED: {initialized}, PDD_TARGETS count: {len(pdd_targets) if pdd_targets else 'None'}")
+    logger.info(f"All globals: {globals_info}")
+
     return jsonify({
         'status': 'healthy',
-        'initialized': INITIALIZED
+        'initialized': initialized,
+        'pdd_targets_count': len(pdd_targets) if pdd_targets else 0,
+        'globals': globals_info
     })
 
 @app.route('/get-sections', methods=['GET'])
 def get_sections():
     """Get all available section headings from the template with their status."""
     try:
-        if not INITIALIZED:
+        initialized = get_initialized_status()
+        if not initialized:
+            logger.warning("Get sections called but backend not initialized")
             return jsonify({'error': 'Backend not initialized'}), 500
 
+        pdd_targets = get_current_pdd_targets()
+        logger.info(f"Get sections called - returning {len(pdd_targets)} sections")
         sections = []
-        for target in PDD_TARGETS:
+        for target in pdd_targets:
             section_name = target[1]
-            section_status = get_section_status(section_name)
+            # For now, return all sections as 'untouched' status
+            # TODO: Implement proper status detection
             sections.append({
                 'name': section_name,
-                'status': section_status
+                'status': 'untouched'
             })
 
+        logger.info(f"Successfully returning {len(sections)} sections to frontend")
         return jsonify({
             'success': True,
             'sections': sections,
@@ -134,7 +147,8 @@ def process_all():
         return jsonify({'error': 'Another processing operation is already in progress'}), 409
 
     try:
-        if not INITIALIZED:
+        initialized = get_initialized_status()
+        if not initialized:
             return jsonify({'error': 'Backend not initialized'}), 500
 
         # Capture stdout to return processing logs
@@ -167,7 +181,8 @@ def process_section_endpoint():
         return jsonify({'error': 'Another processing operation is already in progress'}), 409
 
     try:
-        if not INITIALIZED:
+        initialized = get_initialized_status()
+        if not initialized:
             return jsonify({'error': 'Backend not initialized'}), 500
 
         # Get section name from JSON payload
@@ -206,14 +221,36 @@ def process_section_endpoint():
     finally:
         processing_lock.release()
 
+@app.route('/reinitialize', methods=['POST'])
+def reinitialize_backend():
+    """Reinitialize the backend to refresh template and sections."""
+    try:
+        logger.info("Reinitializing backend...")
+        initialize()
+
+        return jsonify({
+            'success': True,
+            'message': 'Backend reinitialized successfully',
+            'initialized': INITIALIZED,
+            'sections_count': len(PDD_TARGETS) if INITIALIZED else 0
+        })
+    except Exception as e:
+        logger.error(f"Error reinitializing backend: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/status', methods=['GET'])
 def get_status():
     """Get current system status."""
     try:
+        initialized = get_initialized_status()
+        pdd_targets = get_current_pdd_targets()
         return jsonify({
-            'initialized': INITIALIZED,
+            'initialized': initialized,
             'processing_in_progress': processing_lock.locked(),
-            'available_sections_count': len(PDD_TARGETS) if INITIALIZED else 0
+            'available_sections_count': len(pdd_targets) if initialized else 0
         })
     except Exception as e:
         logger.error(f"Error getting status: {str(e)}")
@@ -235,6 +272,7 @@ if __name__ == '__main__':
     print("  GET  /health         - Health check")
     print("  GET  /status         - System status")
     print("  GET  /get-sections   - Get available sections")
+    print("  POST /reinitialize   - Reinitialize backend (refresh sections)")
     print("  POST /process-all    - Process entire document")
     print("  POST /process-section - Process specific section (JSON: {'section_name': 'name'})")
 

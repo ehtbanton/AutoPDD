@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run typecheck:*)"
+      "Bash(npm run typecheck:*)",
+      "Bash(python3:*)",
+      "Bash(where python)",
+      "Bash(where python3)",
+      "Bash(/c/Python312/python api.py)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

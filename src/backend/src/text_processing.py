@@ -8,37 +8,14 @@ def get_pdd_targets(contents_list):
     pdd_targets = []
     section_heading = ""
     for line in contents_list.splitlines():
-        line = line.strip()
-        if not line or "contents" in line.lower():
-            continue
-
-        line_parts = line.split()
-        
-        # Skip empty lines
-        if not line_parts:
-            continue
-
-        # Check if the first word looks like a section number (e.g., "1.1", "2.", "A.1.")
-        # This is a simple check; a more complex regex could be used for more formats.
-        if '.' in line_parts[0] and any(char.isdigit() for char in line_parts[0]):
-            subheading_idx = line_parts[0]
-            
-            # Check if the last word is a page number
-            if line_parts[-1].isdigit():
-                page_num = line_parts[-1]
-                subheading_text = " ".join(line_parts[1:-1])
+        if line.strip() and not line.startswith("Contents"):
+            if "." not in line.split()[0]:
+                section_heading = " ".join(line.split()[1:-1])
             else:
-                page_num = "N/A"
-                subheading_text = " ".join(line_parts[1:])
-            
-            # Clean up any trailing dots from the subheading text
-            subheading_text = re.sub(r'\.+', '', subheading_text).strip()
-
-            pdd_targets.append((section_heading, subheading_text, subheading_idx, page_num))
-        else:
-            # If it's not a subheading, treat the whole line as a main section heading
-            section_heading = line
-
+                subheading = " ".join(line.split()[1:-1])
+                subheading_idx = line.split()[0]
+                page_num = line.split()[-1]
+                pdd_targets.append((section_heading, subheading, subheading_idx, page_num))
     return pdd_targets
 
 def find_target_location(target,template_text):
