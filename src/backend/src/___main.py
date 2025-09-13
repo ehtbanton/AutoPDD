@@ -63,7 +63,7 @@ def initialize():
     INITIALIZED = True
     print("Initialization complete!")
 
-def _process_single_target(target_idx, target):
+def _process_single_target(target_idx, target, force_process=False):
     """Process a single target section."""
     if not INITIALIZED:
         raise RuntimeError("System not initialized. Call initialize() first.")
@@ -80,37 +80,40 @@ def _process_single_target(target_idx, target):
     template_end_loc = find_target_location(PDD_TARGETS[target_idx + 1], TEMPLATE_TEXT) if target_idx + 1 < len(PDD_TARGETS) else -1
     infilling_info = TEMPLATE_TEXT[template_start_loc:template_end_loc] if template_end_loc != -1 else TEMPLATE_TEXT[template_start_loc:]
 
-    # Check current output status
-    output_start_loc = find_target_location(target, OUTPUT_TEXT) if OUTPUT_TEXT else -1
-    output_end_loc = find_target_location(PDD_TARGETS[target_idx + 1], OUTPUT_TEXT) if OUTPUT_TEXT and target_idx + 1 < len(PDD_TARGETS) else -1
-
+    # Check current output status (only if not forcing)
     response = None
     section_status = ""
     current_section_content = ""
 
-    if OUTPUT_TEXT and output_start_loc != -1:
-        current_section_content = OUTPUT_TEXT[output_start_loc:output_end_loc] if output_end_loc != -1 else OUTPUT_TEXT[output_start_loc:]
-        if current_section_content and len(current_section_content.split("\n")) > 2:
-            section_status = current_section_content.split("\n")[2]
+    if not force_process:
+        output_start_loc = find_target_location(target, OUTPUT_TEXT) if OUTPUT_TEXT else -1
+        output_end_loc = find_target_location(PDD_TARGETS[target_idx + 1], OUTPUT_TEXT) if OUTPUT_TEXT and target_idx + 1 < len(PDD_TARGETS) else -1
 
-    # Determine what action to take
-    if "SECTION_COMPLETE" in section_status:
-        print(f"\nSection '{start_marker}' is already complete. Skipping...")
-        sys.stdout.flush()
-        return
+        if OUTPUT_TEXT and output_start_loc != -1:
+            current_section_content = OUTPUT_TEXT[output_start_loc:output_end_loc] if output_end_loc != -1 else OUTPUT_TEXT[output_start_loc:]
+            if current_section_content and len(current_section_content.split("\n")) > 2:
+                section_status = current_section_content.split("\n")[2]
 
-    if "SECTION_ATTEMPTED" in section_status:
-        if not THERE_ARE_NEW_FILES:
-            print(f"\nSection '{start_marker}' has previously been attempted and no new files are available. Skipping...")
+        # Determine what action to take (only if not forcing)
+        if "SECTION_COMPLETE" in section_status:
+            print(f"\nSection '{start_marker}' is already complete. Skipping...")
             sys.stdout.flush()
             return
-        print(f"\nSection '{start_marker}' has previously been attempted, but there are new files! Retrying...")
-        sys.stdout.flush()
-        response = refill_section(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE)
 
-    # Generate section content
+        if "SECTION_ATTEMPTED" in section_status:
+            if not THERE_ARE_NEW_FILES:
+                print(f"\nSection '{start_marker}' has previously been attempted and no new files are available. Skipping...")
+                sys.stdout.flush()
+                return
+            print(f"\nSection '{start_marker}' has previously been attempted, but there are new files! Retrying...")
+            sys.stdout.flush()
+            response = refill_section(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE)
+
+    # Generate section content (always runs if force_process=True)
     if not response:
         print(f"\n{'='*20}\nProcessing section: {start_marker}\n{'='*20}")
+        if force_process:
+            print("Force processing requested - bypassing status checks")
         sys.stdout.flush()
         response = fill_section(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE)
 
@@ -145,7 +148,7 @@ def process_document():
     print(f"\nProcessing complete. The final document has been saved at: {OUTPUT_PATH}\n")
     sys.stdout.flush()
 
-def process_section(section_name: str):
+def process_section(section_name: str, force_process: bool = False):
     """Process a single, specific section by name."""
     if not INITIALIZED:
         raise RuntimeError("System not initialized. Call initialize() first.")
@@ -155,7 +158,7 @@ def process_section(section_name: str):
     for target_idx, target in enumerate(PDD_TARGETS):
         if target[1] == section_name or section_name in target[1]:
             print(f"Found section: {target[1]}")
-            _process_single_target(target_idx, target)
+            _process_single_target(target_idx, target, force_process)
             target_found = True
             break
 

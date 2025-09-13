@@ -200,7 +200,8 @@ def process_section_endpoint():
         sys.stdout = log_capture
 
         try:
-            process_section(section_name)
+            # Force process when called via API (user clicked button)
+            process_section(section_name, force_process=True)
             processing_log = log_capture.getvalue()
         finally:
             sys.stdout = old_stdout
