@@ -22,10 +22,10 @@ export function ConsoleOutput({ logs }: ConsoleOutputProps) {
   }, [logs]);
 
   return (
-    <div>
+    <div className="flex-1 flex flex-col">
        <h3 className="text-sm font-medium mb-1">Console</h3>
-      <Card className="h-32">
-        <ScrollArea className="h-full" ref={viewportRef}>
+      <Card className="flex-1 flex flex-col">
+        <ScrollArea className="flex-1" ref={viewportRef}>
           <CardContent className="p-2">
             <pre className="text-xs whitespace-pre-wrap">
               {logs.map((log, index) => (
