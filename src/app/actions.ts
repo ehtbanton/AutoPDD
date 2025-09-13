@@ -242,3 +242,64 @@ export async function fetchSections(): Promise<string[]> {
         return [];
     }
 }
+
+export async function processSection(sectionName: string): Promise<{ success: boolean; message: string; log?: string }> {
+    try {
+        const response = await fetch('http://localhost:5000/process-section', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                section_name: sectionName
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return {
+            success: data.success || false,
+            message: data.message || 'Section processing completed',
+            log: data.log
+        };
+    } catch (error) {
+        console.error('Error processing section:', error);
+        return {
+            success: false,
+            message: `Error processing section: ${error instanceof Error ? error.message : String(error)}`
+        };
+    }
+}
+
+export async function processAllSections(): Promise<{ success: boolean; message: string; log?: string }> {
+    try {
+        const response = await fetch('http://localhost:5000/process-all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return {
+            success: data.success || false,
+            message: data.message || 'Document processing completed',
+            log: data.log
+        };
+    } catch (error) {
+        console.error('Error processing all sections:', error);
+        return {
+            success: false,
+            message: `Error processing document: ${error instanceof Error ? error.message : String(error)}`
+        };
+    }
+}

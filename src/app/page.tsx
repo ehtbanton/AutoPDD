@@ -9,7 +9,7 @@ import { ControlsPanel } from '@/components/controls-panel';
 import { SectionPanel } from '@/components/section-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections, processSection, processAllSections } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -299,52 +299,57 @@ const Page: FC = () => {
             return;
         }
 
-        log("Starting document processing with Python backend...");
+        log("Starting entire document processing...");
         setIsProcessing(true);
-        processingRef.current = true;
 
-        pollingIntervalRef.current = setInterval(updateOutputViewer, 3000);
+        // Set all sections to processing state
+        setSections(prev => prev.map(section => ({ ...section, status: 'UNATTEMPTED' as const })));
 
         try {
-            const stream = await runPythonBackend();
-            const reader = stream.getReader();
-            const decoder = new TextDecoder();
+            const result = await processAllSections();
 
-            while (processingRef.current) {
-                const { value, done } = await reader.read();
-                if (done) {
-                    log("Python script finished.");
-                    break;
-                }
-                const decodedChunk = decoder.decode(value, { stream: true });
-                const lines = decodedChunk.split('\n').filter(line => line.trim() !== '');
-                for (const line of lines) {
-                    log(line);
-                }
+            if (result.success) {
+                // Mark all sections as complete on success
+                setSections(prev => prev.map(section => ({ ...section, status: 'COMPLETE' as const })));
+                log("Document processing completed successfully.");
+            } else {
+                // Mark all sections as attempted on failure
+                setSections(prev => prev.map(section => ({ ...section, status: 'ATTEMPTED' as const })));
+                log(`Document processing failed: ${result.message}`);
             }
-            if (!processingRef.current) {
-                log("Processing stopped by user.");
+
+            // Log any processing output from the backend
+            if (result.log) {
+                const logLines = result.log.split('\n').filter(line => line.trim());
+                logLines.forEach(line => log(line));
             }
+
+            // Update the output viewer after processing
+            await updateOutputViewer();
+
+            toast({
+                title: result.success ? "Document Complete" : "Document Processing Failed",
+                description: result.message,
+                variant: result.success ? "default" : "destructive",
+                className: result.success ? "bg-accent text-accent-foreground" : undefined,
+            });
 
         } catch (error) {
-            console.error("Error running python backend: ", error);
+            console.error("Error processing document:", error);
             const errorMessage = error instanceof Error ? error.message : String(error);
             log(`Error: ${errorMessage}`);
+
+            // Mark all sections as attempted on error
+            setSections(prev => prev.map(section => ({ ...section, status: 'ATTEMPTED' as const })));
+
             toast({
-                title: "Backend Error",
-                description: "The Python script failed to run. Check the console for details.",
+                title: "Processing Error",
+                description: "The document processing failed. Check the console for details.",
                 variant: "destructive",
             });
         } finally {
             setIsProcessing(false);
-            processingRef.current = false;
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-                pollingIntervalRef.current = null;
-            }
-            log("Fetching final version of the document...");
-            await updateOutputViewer();
-            log("Document processing complete.");
+            log("Document processing operation complete.");
         }
     };
 
@@ -470,19 +475,47 @@ const Page: FC = () => {
         setProcessingSectionIndex(sectionIndex);
 
         try {
-            // Simulate section processing
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            const result = await processSection(section.name);
 
-            setSections(prev => prev.map((s, i) =>
-                i === sectionIndex ? { ...s, status: 'COMPLETE' as const } : s
-            ));
+            if (result.success) {
+                setSections(prev => prev.map((s, i) =>
+                    i === sectionIndex ? { ...s, status: 'COMPLETE' as const } : s
+                ));
+                log(`Section "${section.name}" completed successfully.`);
+            } else {
+                setSections(prev => prev.map((s, i) =>
+                    i === sectionIndex ? { ...s, status: 'ATTEMPTED' as const } : s
+                ));
+                log(`Section "${section.name}" processing failed: ${result.message}`);
+            }
 
-            log(`Section "${section.name}" completed successfully.`);
+            // Log any processing output from the backend
+            if (result.log) {
+                const logLines = result.log.split('\n').filter(line => line.trim());
+                logLines.forEach(line => log(line));
+            }
+
+            // Update the output viewer after processing
+            await updateOutputViewer();
+
+            toast({
+                title: result.success ? "Section Complete" : "Section Processing Failed",
+                description: result.message,
+                variant: result.success ? "default" : "destructive",
+                className: result.success ? "bg-accent text-accent-foreground" : undefined,
+            });
+
         } catch (error) {
-            log(`Error processing section "${section.name}": ${error}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error processing section "${section.name}": ${errorMessage}`);
             setSections(prev => prev.map((s, i) =>
                 i === sectionIndex ? { ...s, status: 'ATTEMPTED' as const } : s
             ));
+            toast({
+                title: "Processing Error",
+                description: `Could not process section "${section.name}".`,
+                variant: "destructive",
+            });
         } finally {
             setProcessingSectionIndex(null);
         }
