@@ -7,7 +7,10 @@ import threading
 import logging
 
 # Import functions from the refactored backend
-from ___main import initialize, process_document, process_section, PDD_TARGETS, INITIALIZED
+from ___main import initialize, process_document, process_section, PDD_TARGETS, INITIALIZED, OUTPUT_TEXT, OUTPUT_PATH
+from text_processing import find_target_location
+from word_editor import load_word_doc_to_string
+import os
 
 # Configure logging to capture print statements
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +21,68 @@ CORS(app)  # Enable CORS for frontend requests
 
 # Thread lock for processing operations
 processing_lock = threading.Lock()
+
+def get_section_status(section_name):
+    """Get the status of a specific section from the output document."""
+    try:
+        if not INITIALIZED or not OUTPUT_PATH:
+            return 'untouched'
+
+        # Get the current output text
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_dir = os.path.abspath(os.path.join(script_dir, '..'))
+        output_doc_folder = os.path.join(backend_dir, "auto_pdd_output")
+
+        current_output_text = load_word_doc_to_string(output_doc_folder)
+        if not current_output_text:
+            return 'untouched'
+
+        # Find the section in PDD_TARGETS to get the target info
+        target = None
+        target_idx = None
+        for idx, pdd_target in enumerate(PDD_TARGETS):
+            if pdd_target[1] == section_name:
+                target = pdd_target
+                target_idx = idx
+                break
+
+        if not target:
+            return 'untouched'
+
+        # Find section location in output document
+        output_start_loc = find_target_location(target, current_output_text)
+        if output_start_loc == -1:
+            return 'untouched'
+
+        # Find end location
+        output_end_loc = -1
+        if target_idx + 1 < len(PDD_TARGETS):
+            next_target = PDD_TARGETS[target_idx + 1]
+            output_end_loc = find_target_location(next_target, current_output_text)
+
+        # Extract section content
+        current_section_content = ""
+        if output_end_loc != -1:
+            current_section_content = current_output_text[output_start_loc:output_end_loc]
+        else:
+            current_section_content = current_output_text[output_start_loc:]
+
+        if not current_section_content or len(current_section_content.split("\n")) <= 2:
+            return 'untouched'
+
+        # Get section status from the third line (following the pattern from ___main.py)
+        section_status_line = current_section_content.split("\n")[2] if len(current_section_content.split("\n")) > 2 else ""
+
+        if "SECTION_COMPLETE" in section_status_line:
+            return 'complete'
+        elif "SECTION_ATTEMPTED" in section_status_line:
+            return 'attempted'
+        else:
+            return 'untouched'
+
+    except Exception as e:
+        logger.error(f"Error getting section status for '{section_name}': {str(e)}")
+        return 'untouched'
 
 @app.before_first_request
 def setup_backend():
@@ -39,12 +104,20 @@ def health_check():
 
 @app.route('/get-sections', methods=['GET'])
 def get_sections():
-    """Get all available section headings from the template."""
+    """Get all available section headings from the template with their status."""
     try:
         if not INITIALIZED:
             return jsonify({'error': 'Backend not initialized'}), 500
 
-        sections = [target[1] for target in PDD_TARGETS]
+        sections = []
+        for target in PDD_TARGETS:
+            section_name = target[1]
+            section_status = get_section_status(section_name)
+            sections.append({
+                'name': section_name,
+                'status': section_status
+            })
+
         return jsonify({
             'success': True,
             'sections': sections,

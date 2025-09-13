@@ -9,7 +9,7 @@ import { ControlsPanel } from '@/components/controls-panel';
 import { SectionPanel } from '@/components/section-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections, processSection, processAllSections } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections, processSection, processAllSections, type SectionWithStatus } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -88,15 +88,15 @@ const Page: FC = () => {
     const loadSections = useCallback(async () => {
         try {
             log("Fetching section headings from template...");
-            const sectionNames = await fetchSections();
+            const sectionsFromBackend = await fetchSections();
 
-            if (sectionNames.length > 0) {
-                const sectionsWithStatus: SectionStatus[] = sectionNames.map(name => ({
-                    name,
-                    status: 'UNATTEMPTED' as const
+            if (sectionsFromBackend.length > 0) {
+                const sectionsWithStatus: SectionStatus[] = sectionsFromBackend.map(section => ({
+                    name: section.name,
+                    status: mapBackendStatusToFrontend(section.status)
                 }));
                 setSections(sectionsWithStatus);
-                log(`Loaded ${sectionNames.length} sections from template.`);
+                log(`Loaded ${sectionsFromBackend.length} sections from template.`);
             } else {
                 setSections([]);
                 log("No sections found in template or backend not available.");
@@ -107,6 +107,18 @@ const Page: FC = () => {
             setSections([]);
         }
     }, [log]);
+
+    const mapBackendStatusToFrontend = (backendStatus: 'complete' | 'attempted' | 'untouched'): SectionStatus['status'] => {
+        switch (backendStatus) {
+            case 'complete':
+                return 'COMPLETE';
+            case 'attempted':
+                return 'ATTEMPTED';
+            case 'untouched':
+            default:
+                return 'UNATTEMPTED';
+        }
+    };
 
     const updateOutputViewer = useCallback(async () => {
         try {
@@ -327,6 +339,9 @@ const Page: FC = () => {
             // Update the output viewer after processing
             await updateOutputViewer();
 
+            // Reload sections to get updated status from backend
+            await loadSections();
+
             toast({
                 title: result.success ? "Document Complete" : "Document Processing Failed",
                 description: result.message,
@@ -497,6 +512,9 @@ const Page: FC = () => {
 
             // Update the output viewer after processing
             await updateOutputViewer();
+
+            // Reload sections to get updated status from backend
+            await loadSections();
 
             toast({
                 title: result.success ? "Section Complete" : "Section Processing Failed",

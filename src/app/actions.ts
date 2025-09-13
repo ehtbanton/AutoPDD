@@ -216,7 +216,12 @@ export async function updateParagraph(oldText: string, newText: string) {
     }
 }
 
-export async function fetchSections(): Promise<string[]> {
+export interface SectionWithStatus {
+    name: string;
+    status: 'complete' | 'attempted' | 'untouched';
+}
+
+export async function fetchSections(): Promise<SectionWithStatus[]> {
     try {
         const response = await fetch('http://localhost:5000/get-sections', {
             method: 'GET',

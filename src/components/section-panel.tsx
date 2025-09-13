@@ -52,6 +52,18 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
         }
     };
 
+    const getStatusHeadingColor = (status: SectionStatus['status']) => {
+        switch (status) {
+            case 'COMPLETE':
+                return 'text-green-600';
+            case 'ATTEMPTED':
+                return 'text-orange-600';
+            case 'UNATTEMPTED':
+            default:
+                return 'text-gray-600';
+        }
+    };
+
     return (
         <Card className="flex-1 flex flex-col overflow-hidden">
             <CardHeader className="p-4">
@@ -97,7 +109,7 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
                                         <div className="flex items-start gap-2 flex-1 min-w-0">
                                             {getStatusIcon(section.status)}
                                             <div className="flex-1 min-w-0">
-                                                <h4 className="font-medium text-sm leading-tight truncate" title={section.name}>
+                                                <h4 className={`font-medium text-sm leading-tight truncate ${getStatusHeadingColor(section.status)}`} title={section.name}>
                                                     {section.name}
                                                 </h4>
                                                 <Badge
