@@ -22,13 +22,14 @@ CORS(app)  # Enable CORS for frontend requests
 # Thread lock for processing operations
 processing_lock = threading.Lock()
 
-def get_section_status(section_name):
-    """Get the status of a specific section from the output document."""
+def get_section_status_from_document(section_name):
+    """Get the status of a specific section by reading the actual output document."""
     try:
-        if not INITIALIZED or not OUTPUT_PATH:
+        initialized = get_initialized_status()
+        if not initialized:
             return 'untouched'
 
-        # Get the current output text
+        # Get the current output text from the document
         script_dir = os.path.dirname(os.path.abspath(__file__))
         backend_dir = os.path.abspath(os.path.join(script_dir, '..'))
         output_doc_folder = os.path.join(backend_dir, "auto_pdd_output")
@@ -37,10 +38,12 @@ def get_section_status(section_name):
         if not current_output_text:
             return 'untouched'
 
+        pdd_targets = get_current_pdd_targets()
+
         # Find the section in PDD_TARGETS to get the target info
         target = None
         target_idx = None
-        for idx, pdd_target in enumerate(PDD_TARGETS):
+        for idx, pdd_target in enumerate(pdd_targets):
             if pdd_target[1] == section_name:
                 target = pdd_target
                 target_idx = idx
@@ -56,8 +59,8 @@ def get_section_status(section_name):
 
         # Find end location
         output_end_loc = -1
-        if target_idx + 1 < len(PDD_TARGETS):
-            next_target = PDD_TARGETS[target_idx + 1]
+        if target_idx + 1 < len(pdd_targets):
+            next_target = pdd_targets[target_idx + 1]
             output_end_loc = find_target_location(next_target, current_output_text)
 
         # Extract section content
@@ -71,7 +74,10 @@ def get_section_status(section_name):
             return 'untouched'
 
         # Get section status from the third line (following the pattern from ___main.py)
-        section_status_line = current_section_content.split("\n")[2] if len(current_section_content.split("\n")) > 2 else ""
+        lines = current_section_content.split("\n")
+        section_status_line = lines[2] if len(lines) > 2 else ""
+
+        logger.info(f"Section '{section_name}' status line: '{section_status_line.strip()}'")
 
         if "SECTION_COMPLETE" in section_status_line:
             return 'complete'
@@ -123,11 +129,11 @@ def get_sections():
         sections = []
         for target in pdd_targets:
             section_name = target[1]
-            # For now, return all sections as 'untouched' status
-            # TODO: Implement proper status detection
+            # Get actual status from document content
+            actual_status = get_section_status_from_document(section_name)
             sections.append({
                 'name': section_name,
-                'status': 'untouched'
+                'status': actual_status
             })
 
         logger.info(f"Successfully returning {len(sections)} sections to frontend")
