@@ -9,7 +9,7 @@ import { ControlsPanel } from '@/components/controls-panel';
 import { SectionPanel } from '@/components/section-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
-import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph } from '@/app/actions';
+import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -76,11 +76,7 @@ const Page: FC = () => {
     const initialLoadDone = useRef(false);
     const [editingPara, setEditingPara] = useState<{ text: string; top: number; left: number, width: number } | null>(null);
     const [editedText, setEditedText] = useState('');
-    const [sections, setSections] = useState<SectionStatus[]>([
-        { name: 'Section 1', status: 'UNATTEMPTED' },
-        { name: 'Section 2', status: 'UNATTEMPTED' },
-        { name: 'Section 3', status: 'UNATTEMPTED' },
-    ]);
+    const [sections, setSections] = useState<SectionStatus[]>([]);
     const [processingSectionIndex, setProcessingSectionIndex] = useState<number | null>(null);
 
     const log = useCallback((message: string) => {
@@ -88,6 +84,29 @@ const Page: FC = () => {
         setLogs((prevLogs) => [...prevLogs, timedMessage]);
         console.log(timedMessage);
     }, []);
+
+    const loadSections = useCallback(async () => {
+        try {
+            log("Fetching section headings from template...");
+            const sectionNames = await fetchSections();
+
+            if (sectionNames.length > 0) {
+                const sectionsWithStatus: SectionStatus[] = sectionNames.map(name => ({
+                    name,
+                    status: 'UNATTEMPTED' as const
+                }));
+                setSections(sectionsWithStatus);
+                log(`Loaded ${sectionNames.length} sections from template.`);
+            } else {
+                setSections([]);
+                log("No sections found in template or backend not available.");
+            }
+        } catch (error) {
+            console.error("Error loading sections:", error);
+            log(`Error loading sections: ${error instanceof Error ? error.message : String(error)}`);
+            setSections([]);
+        }
+    }, [log]);
 
     const updateOutputViewer = useCallback(async () => {
         try {
@@ -127,6 +146,7 @@ const Page: FC = () => {
             if (templateName) {
                 setTemplatePath(templateName);
                 log(`Found existing template: "${templateName}"`);
+                await loadSections();
             }
             const existingContexts = await getExistingContextFiles();
             if (existingContexts.length > 0) {
@@ -140,7 +160,7 @@ const Page: FC = () => {
             }
         };
         loadInitialData();
-    }, [log, updateOutputViewer]);
+    }, [log, updateOutputViewer, loadSections]);
 
     const handleTemplateUpload = async (file: File) => {
         log(`Uploading template "${file.name}"...`);
@@ -157,6 +177,7 @@ const Page: FC = () => {
                 await updateOutputViewer();
                 setTemplatePath(file.name);
                 log(`Template "${file.name}" uploaded for processing.`);
+                await loadSections();
                 toast({
                     title: "Upload Successful",
                     description: `Template "${file.name}" has been loaded.`,

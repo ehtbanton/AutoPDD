@@ -215,3 +215,30 @@ export async function updateParagraph(oldText: string, newText: string) {
         throw error;
     }
 }
+
+export async function fetchSections(): Promise<string[]> {
+    try {
+        const response = await fetch('http://localhost:5000/get-sections', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success && Array.isArray(data.sections)) {
+            return data.sections;
+        } else {
+            console.error('Invalid response format from /get-sections:', data);
+            return [];
+        }
+    } catch (error) {
+        console.error('Error fetching sections:', error);
+        return [];
+    }
+}
