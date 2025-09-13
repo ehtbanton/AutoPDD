@@ -6,6 +6,7 @@ import * as docx from 'docx-preview';
 import { TemplateEditor } from '@/components/template-editor';
 import { ContextViewer } from '@/components/context-viewer';
 import { ControlsPanel } from '@/components/controls-panel';
+import { SectionPanel } from '@/components/section-panel';
 import { FileUploadButton } from '@/components/file-upload-button';
 import { useToast } from "@/hooks/use-toast";
 import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph } from '@/app/actions';
@@ -18,6 +19,11 @@ import { Textarea } from '@/components/ui/textarea';
 export type ContextFile = {
     name: string;
     content: ArrayBuffer;
+};
+
+export type SectionStatus = {
+    name: string;
+    status: 'COMPLETE' | 'ATTEMPTED' | 'UNATTEMPTED';
 };
 
 const initialLogs = [
@@ -70,6 +76,12 @@ const Page: FC = () => {
     const initialLoadDone = useRef(false);
     const [editingPara, setEditingPara] = useState<{ text: string; top: number; left: number, width: number } | null>(null);
     const [editedText, setEditedText] = useState('');
+    const [sections, setSections] = useState<SectionStatus[]>([
+        { name: 'Section 1', status: 'UNATTEMPTED' },
+        { name: 'Section 2', status: 'UNATTEMPTED' },
+        { name: 'Section 3', status: 'UNATTEMPTED' },
+    ]);
+    const [processingSectionIndex, setProcessingSectionIndex] = useState<number | null>(null);
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -431,6 +443,30 @@ const Page: FC = () => {
         }
     };
 
+    const handleFillSection = async (sectionIndex: number) => {
+        const section = sections[sectionIndex];
+        log(`Processing section: ${section.name}`);
+        setProcessingSectionIndex(sectionIndex);
+
+        try {
+            // Simulate section processing
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            setSections(prev => prev.map((s, i) =>
+                i === sectionIndex ? { ...s, status: 'COMPLETE' as const } : s
+            ));
+
+            log(`Section "${section.name}" completed successfully.`);
+        } catch (error) {
+            log(`Error processing section "${section.name}": ${error}`);
+            setSections(prev => prev.map((s, i) =>
+                i === sectionIndex ? { ...s, status: 'ATTEMPTED' as const } : s
+            ));
+        } finally {
+            setProcessingSectionIndex(null);
+        }
+    };
+
 
     return (
         <main className="h-full flex flex-col p-4 gap-4 bg-background">
@@ -442,8 +478,8 @@ const Page: FC = () => {
                     Fill in your PDD automatically using a bundle of provided PDF files
                 </p>
             </header>
-            <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-                <div className="lg:col-span-1 flex flex-col gap-2 min-h-0">
+            <div className="flex-grow grid grid-cols-1 xl:grid-cols-4 gap-4 min-h-0">
+                <div className="xl:col-span-1 flex flex-col gap-2 min-h-0">
                     <ControlsPanel
                         logs={logs}
                         onFillDocument={handleFillDocument}
@@ -459,7 +495,7 @@ const Page: FC = () => {
                         onRemoveAllContexts={handleRemoveAllContexts}
                     />
                 </div>
-                <div className="lg:col-span-2 flex flex-col min-h-0">
+                <div className="xl:col-span-2 flex flex-col min-h-0">
                     {isDocx ? (
                         <Card className="flex-1 flex flex-col overflow-hidden">
                             <CardHeader>
@@ -508,6 +544,15 @@ const Page: FC = () => {
                             </div>
                         </div>
                     )}
+                </div>
+                <div className="xl:col-span-1 flex flex-col min-h-0">
+                    <SectionPanel
+                        sections={sections}
+                        onFillSection={handleFillSection}
+                        onFillDocument={handleFillDocument}
+                        processingSectionIndex={processingSectionIndex}
+                        isProcessingDocument={isProcessing}
+                    />
                 </div>
             </div>
         </main>

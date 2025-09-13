@@ -10,10 +10,12 @@ import type { SectionStatus } from '@/app/page';
 interface SectionPanelProps {
     sections: SectionStatus[];
     onFillSection: (sectionIndex: number) => void;
+    onFillDocument: () => void;
     processingSectionIndex: number | null;
+    isProcessingDocument: boolean;
 }
 
-export function SectionPanel({ sections, onFillSection, processingSectionIndex }: SectionPanelProps) {
+export function SectionPanel({ sections, onFillSection, onFillDocument, processingSectionIndex, isProcessingDocument }: SectionPanelProps) {
     const getStatusIcon = (status: SectionStatus['status']) => {
         switch (status) {
             case 'COMPLETE':
@@ -61,6 +63,22 @@ export function SectionPanel({ sections, onFillSection, processingSectionIndex }
                 </p>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0 p-0 px-4 pb-4">
+                <div className="mb-4">
+                    <Button
+                        onClick={onFillDocument}
+                        disabled={isProcessingDocument || processingSectionIndex !== null}
+                        className="w-full"
+                    >
+                        {isProcessingDocument ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Processing Document...
+                            </>
+                        ) : (
+                            'Fill entire document'
+                        )}
+                    </Button>
+                </div>
                 <ScrollArea className="flex-1 rounded-md border bg-white overflow-auto">
                     <div className="p-4 space-y-3">
                         {sections.length === 0 ? (
