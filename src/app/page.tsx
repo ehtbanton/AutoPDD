@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { runPythonBackend, uploadContextFile, uploadTemplateFile, getExistingContextFiles, getTemplateName, getOutputFileAsBase64, resetTemplate, removeAllContexts, updateParagraph, fetchSections, processSection, processAllSections, reinitializeBackend, type SectionWithStatus } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Download } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 
 
@@ -436,6 +436,45 @@ const Page: FC = () => {
         }
     }
 
+    const handleDownloadDocument = async () => {
+        if (!templateFile) {
+            log("Error: No document to download.");
+            toast({
+                title: "Download Failed",
+                description: "No document available to download.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            log("Downloading Word document...");
+            const url = URL.createObjectURL(templateFile);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = templatePath || 'document.docx';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            log("Document downloaded successfully.");
+            toast({
+                title: "Download Complete",
+                description: "The Word document has been downloaded.",
+                variant: "default",
+                className: "bg-accent text-accent-foreground",
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error downloading document: ${errorMessage}`);
+            toast({
+                title: "Download Failed",
+                description: "Could not download the document.",
+                variant: "destructive",
+            });
+        }
+    }
+
     const handleDocClick = (e: React.MouseEvent<HTMLDivElement>) => {
         if (editingPara) {
             handleCancelEdit();
@@ -761,6 +800,14 @@ const Page: FC = () => {
                                 <div className="flex justify-between items-center">
                                     <CardTitle>PDD Viewer</CardTitle>
                                     <div className="flex items-center gap-2">
+                                        <Button
+                                            onClick={handleDownloadDocument}
+                                            size="sm"
+                                            variant="default"
+                                            disabled={!templateFile}
+                                        >
+                                            <Download className="mr-2 h-4 w-4" /> Download Word Document
+                                        </Button>
                                         <Button onClick={handleResetTemplate} size="sm" variant="destructive">
                                             <Trash2 className="mr-2 h-4 w-4" /> Reset to Blank
                                         </Button>

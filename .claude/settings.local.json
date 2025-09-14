@@ -8,7 +8,8 @@
       "Bash(/c/Python312/python api.py)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:github.com)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run lint)"
     ],
     "deny": [],
     "ask": []
