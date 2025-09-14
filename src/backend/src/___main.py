@@ -175,7 +175,8 @@ def _process_single_target(target_idx, target, force_process=False):
             print(f"Section status determined as: {final_status}")
 
             # Only update section status marker (content already replaced)
-            replace_section_content(OUTPUT_PATH, start_marker, end_marker, "", final_status)
+            # Don't pass empty string as it will clear the section
+            replace_section_content(OUTPUT_PATH, start_marker, end_marker, "SECTION_STATUS_UPDATE_ONLY", final_status)
 
         elif response.get("type") == "section_fallback":
             # Check traditional section content for INFO_NOT_FOUND

@@ -78,7 +78,7 @@ def markdown_to_word_table(doc, md_table_text):
 
 def replace_section_content(doc_path, start_marker, end_marker, new_content, status):
     """Replace a section with new content, preserving document structure"""
-    
+
     try:
         doc = docx.Document(doc_path)
         all_blocks = list(_iter_block_items(doc))
@@ -92,14 +92,51 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
                 elif start_index != -1 and block.text.strip() == end_marker:
                     end_index = i
                     break
-        
+
         if start_index == -1:
             print(f"  > WARNING: Start marker '{start_marker}' not found.")
             return
 
         # Get the heading paragraph for reference
         heading_paragraph = all_blocks[start_index]
-        
+
+        # Special case: If this is just a status update (content already inserted via JSON approach),
+        # only update/add the status line without removing existing content
+        if new_content == "SECTION_STATUS_UPDATE_ONLY":
+            print(f"  > Status update only for section '{start_marker}' - preserving existing content")
+
+            # Look for existing status paragraph (second paragraph after heading)
+            if start_index + 1 < len(all_blocks):
+                potential_status = all_blocks[start_index + 1]
+                if isinstance(potential_status, docx.text.paragraph.Paragraph):
+                    # Check if this looks like a status line
+                    status_text = potential_status.text.strip()
+                    if any(keyword in status_text for keyword in ["SECTION_", "COMPLETE", "ATTEMPTED", "FAILED"]):
+                        # Update existing status
+                        potential_status.text = status
+                        print(f"  > Updated existing status to: {status}")
+                    else:
+                        # Insert new status paragraph after heading
+                        heading_element = heading_paragraph._element
+                        status_para_element = OxmlElement("w:p")
+                        heading_element.addnext(status_para_element)
+                        status_para = Paragraph(status_para_element, doc)
+                        status_para.text = status
+                        print(f"  > Inserted new status: {status}")
+            else:
+                # Insert new status paragraph after heading
+                heading_element = heading_paragraph._element
+                status_para_element = OxmlElement("w:p")
+                heading_element.addnext(status_para_element)
+                status_para = Paragraph(status_para_element, doc)
+                status_para.text = status
+                print(f"  > Inserted new status: {status}")
+
+            doc.save(doc_path)
+            print(f"Status update completed for section '{start_marker}'.")
+            return
+
+        # Normal case: Replace section content
         # Find and remove all existing content between start and end markers
         # We need to preserve the heading but remove everything else
         elements_to_remove = []
@@ -118,7 +155,7 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
         heading_element.addnext(status_para_element)
         status_para = Paragraph(status_para_element, doc)
         status_para.text = status
-        
+
         # Use the status paragraph as our insertion point for the rest of the content
         insert_position = status_para_element
 

@@ -406,7 +406,7 @@ def fill_document_from_json(doc_path, json_data):
 
 def replace_text_with_metadata(doc, search_text, replacement_text, source_document, page_number):
     """
-    Find and replace text in the document, then add metadata as a comment.
+    Find and replace text in the document using intelligent matching, then add metadata as a comment.
 
     Returns:
         bool: True if text was found and replaced, False otherwise
@@ -414,41 +414,114 @@ def replace_text_with_metadata(doc, search_text, replacement_text, source_docume
     search_text_lower = search_text.lower().strip()
     replaced = False
 
-    # Search through all paragraphs
-    for paragraph in doc.paragraphs:
-        if search_text_lower in paragraph.text.lower():
-            # Replace the text
-            paragraph.text = replacement_text
+    # Define placeholder patterns to look for
+    placeholder_patterns = [
+        "[to_fill]", "[fill]", "tbd", "to be determined", "n/a", "not available",
+        "_____", "...", "___", "info_not_found", "[placeholder]", "[insert]",
+        "[description]", "[summary]", "[details]", "[information]"
+    ]
 
-            # Add comment with metadata
+    print(f"    Searching for: '{search_text}' (cleaned: '{search_text_lower}')")
+
+    # Strategy 1: Look for exact or partial matches
+    def try_replace_in_paragraph(paragraph):
+        para_text = paragraph.text.lower().strip()
+
+        # Skip empty paragraphs
+        if not para_text:
+            return False
+
+        print(f"      Checking paragraph: '{paragraph.text[:100]}...' (length: {len(paragraph.text)})")
+
+        # Exact match (case insensitive)
+        if search_text_lower == para_text:
+            print(f"      ✓ Exact match found")
+            paragraph.text = replacement_text
             if source_document and page_number:
                 add_comment_to_paragraph(paragraph, source_document, page_number)
+            return True
 
+        # Partial match (search text contained in paragraph) - but replace the exact match
+        if search_text_lower in para_text:
+            print(f"      ✓ Partial match found - replacing exact text within paragraph")
+            # Use regex for case-insensitive replacement of the exact search text
+            import re
+            pattern = re.escape(search_text)
+            new_text = re.sub(pattern, replacement_text, paragraph.text, flags=re.IGNORECASE)
+            paragraph.text = new_text
+            if source_document and page_number:
+                add_comment_to_paragraph(paragraph, source_document, page_number)
+            return True
+
+        # Check if paragraph contains any placeholder patterns
+        for pattern in placeholder_patterns:
+            if pattern in para_text:
+                print(f"      ✓ Placeholder '{pattern}' found, replacing")
+                # Do case-insensitive replacement of the placeholder pattern
+                import re
+                new_text = re.sub(re.escape(pattern), replacement_text, paragraph.text, flags=re.IGNORECASE)
+                paragraph.text = new_text
+                if source_document and page_number:
+                    add_comment_to_paragraph(paragraph, source_document, page_number)
+                return True
+
+        # Check for very short paragraphs that might be placeholders (but be more conservative)
+        if len(para_text) <= 5 and para_text.lower() in ["tbd", "n/a", "...", "___", "____", "_____"]:
+            print(f"      ✓ Short placeholder found: '{para_text}'")
+            paragraph.text = replacement_text
+            if source_document and page_number:
+                add_comment_to_paragraph(paragraph, source_document, page_number)
+            return True
+
+        # Word overlap matching for complex search terms (like bullet points)
+        search_words = set(word.lower() for word in search_text.split() if len(word) > 3)
+        para_words = set(word.lower() for word in paragraph.text.split() if len(word) > 3)
+
+        # Remove common words that don't help with matching
+        common_words = {"the", "and", "for", "with", "this", "that", "will", "are", "have", "been", "from", "project"}
+        search_words -= common_words
+        para_words -= common_words
+
+        if search_words and len(search_words & para_words) >= min(3, len(search_words) * 0.7):
+            overlap_words = search_words & para_words
+            print(f"      ✓ Word overlap match found: {overlap_words}")
+            print(f"      ✓ Replacing text that has significant word overlap")
+            # Replace the entire paragraph since it matches the concept
+            paragraph.text = replacement_text
+            if source_document and page_number:
+                add_comment_to_paragraph(paragraph, source_document, page_number)
+            return True
+
+        return False
+
+    # Search through all paragraphs
+    print(f"    Searching in document paragraphs...")
+    for i, paragraph in enumerate(doc.paragraphs):
+        if try_replace_in_paragraph(paragraph):
+            print(f"    ✓ Replaced in paragraph {i+1}")
             replaced = True
             break
 
     # If not found in paragraphs, search through tables
     if not replaced:
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for paragraph in cell.paragraphs:
-                        if search_text_lower in paragraph.text.lower():
-                            # Replace the text
-                            paragraph.text = replacement_text
-
-                            # Add comment with metadata
-                            if source_document and page_number:
-                                add_comment_to_paragraph(paragraph, source_document, page_number)
-
-                            replaced = True
-                            break
-                    if replaced:
-                        break
-                if replaced:
-                    break
+        print(f"    Searching in document tables...")
+        for table_idx, table in enumerate(doc.tables):
             if replaced:
                 break
+            for row_idx, row in enumerate(table.rows):
+                if replaced:
+                    break
+                for cell_idx, cell in enumerate(row.cells):
+                    if replaced:
+                        break
+                    for para_idx, paragraph in enumerate(cell.paragraphs):
+                        if try_replace_in_paragraph(paragraph):
+                            print(f"    ✓ Replaced in table {table_idx+1}, row {row_idx+1}, cell {cell_idx+1}, paragraph {para_idx+1}")
+                            replaced = True
+                            break
+
+    if not replaced:
+        print(f"    ✗ No match found for '{search_text}'")
 
     return replaced
 

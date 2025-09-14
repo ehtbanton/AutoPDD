@@ -135,32 +135,43 @@ Return only valid JSON with verbatim quotes from the source documents.
 """
 
 def assemble_system_prompt():
-    return """You are a document completion assistant. Your task is to identify information requests from template sections and find exact quotes from source documents.
+    return """You are a document completion assistant. Your task is to identify specific text in template sections that requests information, then find exact quotes from source documents to replace that text.
 
 PROCESS:
-1. **PARSE TEMPLATE**: First, analyze the provided template to identify all individual questions or information requests (fields, table cells, paragraphs to fill)
-2. **FIND QUOTES**: For each information request, search the source documents to find a direct, verbatim quote that answers it
-3. **OUTPUT JSON**: Return a JSON object with this structure:
+1. **IDENTIFY REQUEST TEXT**: Look for sentences or phrases that clearly request information:
+   - "A summary description of the technologies/measures to be implemented"
+   - "The location of the project"
+   - "An explanation of how the project is expected to generate GHG emission reductions"
+   - Text ending with periods that describe what should be provided
+   - Bullet points that describe required content
+
+2. **USE EXACT TEXT AS KEYS**: Use the actual text from the template as your JSON keys, not simplified versions
+
+3. **FIND QUOTES**: For each request, search source documents for verbatim quotes that answer it
+
+4. **OUTPUT JSON**: Return JSON with this structure:
 
 {
-  "question_or_field_name": {
-    "extracted_text": "exact quote from source document",
+  "A summary description of the technologies/measures to be implemented by the project.": {
+    "extracted_text": "exact quote from source document that describes technologies",
     "source_document": "document_name.pdf",
     "page_number": 42
   },
-  "another_field": {
-    "extracted_text": "another verbatim quote",
+  "The location of the project.": {
+    "extracted_text": "exact quote about project location",
     "source_document": "document_name.pdf",
     "page_number": 15
   }
 }
 
-KEY REQUIREMENTS:
-1. **VERBATIM QUOTES**: The "extracted_text" must be word-for-word quotes from the source documents
-2. **COMPLETE INFORMATION**: Include source document name and page number for each quote
-3. **FIELD IDENTIFICATION**: Use descriptive names for keys that clearly identify what information is being requested
+CRITICAL REQUIREMENTS:
+1. **USE ACTUAL TEMPLATE TEXT**: Your JSON keys must be the exact text from the template that describes what's needed
+2. **VERBATIM QUOTES**: The "extracted_text" must be word-for-word quotes from source documents
+3. **COMPLETE SENTENCES**: Use full sentences from the template as keys, not shortened versions
 4. **MISSING INFO**: If no quote can be found, use: {"extracted_text": "INFO_NOT_FOUND", "source_document": null, "page_number": null}
 5. **VALID JSON**: Ensure your entire response is valid JSON format
+
+EXAMPLE: If the template says "An estimate of annual average and total reductions and removals." then use that EXACT text as your JSON key, don't simplify it to "annual_reductions".
 
 Your entire response must be valid JSON containing the quote-based information extraction."""
 
@@ -248,8 +259,9 @@ def is_valid_response(response, infilling_info):
         return False
 
 def convert_quotes_to_section(quotes_json, original_template):
-    """Convert JSON quotes back to filled section format"""
+    """Convert JSON quotes back to filled section format with intelligent replacement"""
     if not isinstance(quotes_json, dict):
+        print(f"  > Warning: Expected dict for quotes, got {type(quotes_json)}")
         return original_template
 
     # If there's an error in the quotes_json, return original template
@@ -257,41 +269,96 @@ def convert_quotes_to_section(quotes_json, original_template):
         print(f"  > Error in AI response: {quotes_json.get('details', 'Unknown error')}")
         return original_template
 
+    print(f"  > Converting {len(quotes_json)} quotes to section format")
+
     # Start with the original template
     result_content = original_template
 
-    # Replace placeholders and empty fields with extracted text
+    # Enhanced replacement strategy
+    extracted_texts = []
     for field_name, quote_data in quotes_json.items():
         if isinstance(quote_data, dict) and "extracted_text" in quote_data:
             extracted_text = quote_data["extracted_text"]
 
             # Skip if no information was found
             if extracted_text == "INFO_NOT_FOUND":
+                print(f"  > Skipping INFO_NOT_FOUND for {field_name}")
                 continue
 
-            # Try to intelligently replace content in the template
-            # This is a simplified approach - could be made more sophisticated
+            extracted_texts.append({
+                "field": field_name,
+                "text": extracted_text,
+                "source": quote_data.get("source_document", ""),
+                "page": quote_data.get("page_number", "")
+            })
+            print(f"  > Found quote for {field_name}: '{extracted_text[:50]}...'")
 
-            # Look for common placeholder patterns
-            placeholder_patterns = [
-                "[TO_FILL]", "TBD", "N/A", "_____", "...",
-                "[PARAGRAPH_TO_FILL]", "INFO_NOT_FOUND"
+    if not extracted_texts:
+        print(f"  > No valid quotes found, returning original template")
+        return original_template
+
+    # Strategy 1: Replace common placeholder patterns
+    placeholder_patterns = [
+        "[TO_FILL]", "[FILL]", "TBD", "To be determined", "N/A", "Not available",
+        "_____", "...", "___", "INFO_NOT_FOUND", "[PLACEHOLDER]", "[INSERT]",
+        "[DESCRIPTION]", "[SUMMARY]", "[DETAILS]", "[INFORMATION]"
+    ]
+
+    replacements_made = 0
+    for extract in extracted_texts:
+        replaced = False
+
+        # Try to replace placeholder patterns
+        for pattern in placeholder_patterns:
+            if pattern in result_content and not replaced:
+                # Add source citation
+                citation = ""
+                if extract["source"] and extract["page"]:
+                    citation = f" (Source: {extract['source']}, Page {extract['page']})"
+
+                result_content = result_content.replace(pattern, extract["text"] + citation, 1)
+                replaced = True
+                replacements_made += 1
+                print(f"  > Replaced '{pattern}' with quote from {extract['field']}")
+                break
+
+        # Strategy 2: Replace empty table cells
+        if not replaced:
+            import re
+            # Look for empty cells in markdown tables
+            empty_cell_patterns = [
+                r'\|\s*\|',  # | |
+                r'\|\s*TBD\s*\|',  # | TBD |
+                r'\|\s*N/A\s*\|',  # | N/A |
+                r'\|\s*\.\.\.\s*\|',  # | ... |
             ]
 
-            # Replace first occurrence of any placeholder pattern
-            replaced = False
-            for pattern in placeholder_patterns:
-                if pattern in result_content and not replaced:
-                    result_content = result_content.replace(pattern, extracted_text, 1)
+            for pattern in empty_cell_patterns:
+                if re.search(pattern, result_content) and not replaced:
+                    citation = ""
+                    if extract["source"] and extract["page"]:
+                        citation = f" (Source: {extract['source']}, Page {extract['page']})"
+
+                    result_content = re.sub(pattern, f'| {extract["text"]}{citation} |', result_content, count=1)
                     replaced = True
+                    replacements_made += 1
+                    print(f"  > Replaced empty table cell with quote from {extract['field']}")
                     break
 
-            # If no placeholder pattern found, try to find empty table cells
-            if not replaced:
-                # Look for empty cells in markdown tables (| | pattern)
-                import re
-                table_cell_pattern = r'\|\s*\|'
-                if re.search(table_cell_pattern, result_content):
-                    result_content = re.sub(table_cell_pattern, f'| {extracted_text} |', result_content, count=1)
+    print(f"  > Made {replacements_made} replacements in section content")
+
+    # Strategy 3: If no replacements made, append quotes to end of section
+    if replacements_made == 0 and extracted_texts:
+        print(f"  > No placeholders found, appending quotes to section")
+        result_content += "\n\n**Additional Information:**\n"
+        for extract in extracted_texts:
+            citation = ""
+            if extract["source"] and extract["page"]:
+                citation = f" (Source: {extract['source']}, Page {extract['page']})"
+
+            result_content += f"\n• {extract['text']}{citation}"
+
+        replacements_made = len(extracted_texts)
+        print(f"  > Appended {replacements_made} quotes to section")
 
     return result_content
