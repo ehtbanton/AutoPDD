@@ -6,6 +6,7 @@ from docx.oxml.text.paragraph import CT_P
 from docx.oxml.table import CT_Tbl
 from docx.oxml import OxmlElement # <--- ADD THIS IMPORT
 from docx.text.paragraph import Paragraph # <--- ADD THIS IMPORT
+from docx.shared import RGBColor, Pt
 import sys
 
 # --- HELPER FUNCTIONS ---
@@ -134,6 +135,158 @@ def replace_paragraph_text(doc, old_text, new_text):
                         p.add_run(new_text)
                         return True # Indicate success
     return False # Indicate that the text was not found
+
+
+def fill_document_block_by_block(doc_path, quotes_json):
+    """
+    Fill document block-by-block using JSON quotes data.
+    Each question becomes a subheading with the answer inserted after it.
+    """
+    if not isinstance(quotes_json, dict):
+        print(f"Error: Expected dictionary, got {type(quotes_json)}")
+        return False
+
+    try:
+        doc = docx.Document(doc_path)
+
+        # Track if any changes were made
+        changes_made = False
+
+        # Iterate through each question/answer pair in the JSON
+        for question_key, quote_data in quotes_json.items():
+            if not isinstance(quote_data, dict) or 'extracted_text' not in quote_data:
+                print(f"Warning: Invalid quote data for {question_key}")
+                continue
+
+            extracted_text = quote_data.get('extracted_text', '')
+            source_document = quote_data.get('source_document', '')
+            page_number = quote_data.get('page_number', '')
+
+            # Skip if no information was found
+            if extracted_text == "INFO_NOT_FOUND":
+                continue
+
+            # Find a good location to insert this content
+            # Look for the question text or similar patterns in the document
+            insertion_point = find_insertion_point(doc, question_key)
+
+            if insertion_point:
+                # Insert the question as a subheading if not already present
+                question_paragraph = insert_question_subheading(doc, insertion_point, question_key)
+
+                # Insert the answer text after the question
+                answer_paragraph = insert_answer_with_source(doc, question_paragraph,
+                                                           extracted_text, source_document, page_number)
+                changes_made = True
+                print(f"  > Inserted content for: {question_key[:50]}...")
+            else:
+                print(f"  > Warning: Could not find insertion point for: {question_key[:50]}...")
+
+        if changes_made:
+            doc.save(doc_path)
+            print(f"Document updated successfully: {doc_path}")
+            return True
+        else:
+            print("No changes made to document")
+            return False
+
+    except Exception as e:
+        print(f"Error filling document block-by-block: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def find_insertion_point(doc, question_key):
+    """
+    Find the best insertion point for a question/answer pair.
+    Looks for placeholder text, empty cells, or similar question text.
+    """
+    # Clean the question key for better matching
+    cleaned_question = question_key.replace('_', ' ').lower().strip()
+
+    # Search through paragraphs for placeholder patterns or similar text
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip().lower()
+
+        # Look for placeholder patterns
+        if any(pattern in text for pattern in ['[to_fill]', 'tbd', 'n/a', '_____', '...', 'info_not_found']):
+            return paragraph
+
+        # Look for similar question text (partial matching)
+        if len(cleaned_question) > 10 and cleaned_question in text:
+            return paragraph
+
+    # Search through tables for empty cells or placeholder patterns
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    text = paragraph.text.strip().lower()
+
+                    if any(pattern in text for pattern in ['[to_fill]', 'tbd', 'n/a', '_____', '...', 'info_not_found']):
+                        return paragraph
+
+                    # Check for empty or minimal content cells
+                    if len(text) == 0 or (len(text) < 10 and not text.isalpha()):
+                        return paragraph
+
+    return None
+
+
+def insert_question_subheading(doc, insertion_point, question_text):
+    """
+    Insert a question as a subheading at the specified insertion point.
+    Returns the created paragraph.
+    """
+    # Get the parent element to insert after
+    if hasattr(insertion_point, '_element'):
+        parent_element = insertion_point._element.getparent()
+
+        # Create new paragraph element for the question
+        question_para_element = OxmlElement("w:p")
+        insertion_point._element.addnext(question_para_element)
+        question_para = Paragraph(question_para_element, doc)
+
+        # Format as a subheading (bold, slightly larger)
+        run = question_para.add_run(question_text.replace('_', ' ').title())
+        run.bold = True
+
+        return question_para
+
+    return None
+
+
+def insert_answer_with_source(doc, question_paragraph, answer_text, source_document, page_number):
+    """
+    Insert answer text after the question paragraph with embedded source information.
+    """
+    if not question_paragraph or not hasattr(question_paragraph, '_element'):
+        return None
+
+    # Create new paragraph for the answer
+    answer_para_element = OxmlElement("w:p")
+    question_paragraph._element.addnext(answer_para_element)
+    answer_para = Paragraph(answer_para_element, doc)
+
+    # Add the main answer text
+    main_run = answer_para.add_run(answer_text)
+
+    # Add source information as a smaller, gray text run
+    if source_document and page_number:
+        source_run = answer_para.add_run(f" (Source: {source_document}, Page {page_number})")
+        source_run.font.size = Pt(9)
+        source_run.font.color.rgb = RGBColor(128, 128, 128)  # Gray color
+        source_run.italic = True
+
+    # Add hidden text with structured source data for frontend parsing
+    if source_document and page_number:
+        hidden_run = answer_para.add_run()
+        hidden_run.text = f"{{\"source\":\"{source_document}\",\"page\":{page_number}}}"
+        hidden_run.font.hidden = True
+
+    return answer_para
+
 
 if __name__ == '__main__':
     # For debugging: print the received arguments
