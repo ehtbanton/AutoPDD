@@ -174,4 +174,13 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
 
 def check_for_info_not_found(content):
     """Check if the section content contains any INFO_NOT_FOUND markers"""
-    return "INFO_NOT_FOUND" in content
+    # Handle both JSON format (from quotes) and text format (converted section)
+    if isinstance(content, dict):
+        # If it's a JSON response with quotes, check if any extracted_text is INFO_NOT_FOUND
+        for key, value in content.items():
+            if isinstance(value, dict) and value.get("extracted_text") == "INFO_NOT_FOUND":
+                return True
+        return False
+    else:
+        # If it's text content, check for INFO_NOT_FOUND string
+        return "INFO_NOT_FOUND" in str(content)

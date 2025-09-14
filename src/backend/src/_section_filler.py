@@ -1,5 +1,5 @@
 from gemini_interface import ask_gemini
-from text_processing import assemble_user_prompt, assemble_system_prompt, is_valid_response, parse_ai_response_as_section
+from text_processing import assemble_user_prompt, assemble_system_prompt, is_valid_response, parse_ai_response_as_section, convert_quotes_to_section
 import sys
 
 
@@ -28,8 +28,14 @@ def fill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache):
             sys.stdout.flush()
             # Don't exit, return the best response we have
             break
-    
-    return parse_ai_response_as_section(response)
+
+    # Parse the AI response as JSON quotes
+    quotes_json = parse_ai_response_as_section(response)
+
+    # Convert quotes back to section format
+    section_content = convert_quotes_to_section(quotes_json, infilling_info)
+
+    return section_content
 
 
 def refill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache):
@@ -44,22 +50,30 @@ def refill_section_targeted(GEMINI_CLIENT, current_section_content, uploaded_fil
     """
     Future enhancement: Only refill the specific INFO_NOT_FOUND items in an existing section
     """
-    system_prompt = """You are tasked with updating a document section that contains some "INFO_NOT_FOUND" placeholders.
+    system_prompt = assemble_system_prompt()
 
-Replace ONLY the "INFO_NOT_FOUND" values with appropriate information from the provided source documents. 
-Leave all other content exactly as it is.
+    user_prompt = f"""Please analyze this section content and find quotes to replace any "INFO_NOT_FOUND" values:
 
-Return the complete updated section with INFO_NOT_FOUND values replaced where possible."""
-
-    user_prompt = f"""Please update this section by replacing any "INFO_NOT_FOUND" values with information from the source documents:
-
+SECTION CONTENT TO UPDATE:
 ---
 {current_section_content}
 ---
 
-Only change the "INFO_NOT_FOUND" values. Keep everything else identical."""
+INSTRUCTIONS:
+1. Identify all "INFO_NOT_FOUND" placeholders in the section
+2. For each placeholder, search the source documents for exact, word-for-word quotes that can replace it
+3. Return a JSON object with quotes only for the INFO_NOT_FOUND items
+4. Use "INFO_NOT_FOUND" if no replacement quote can be found
+
+Return only valid JSON with verbatim quotes from the source documents."""
 
     print(f"  > Gemini API Call for targeted refill...")
     sys.stdout.flush()
     response = ask_gemini(GEMINI_CLIENT, user_prompt, system_prompt, uploaded_files_cache)
-    return parse_ai_response_as_section(response)
+    # Parse the AI response as JSON quotes
+    quotes_json = parse_ai_response_as_section(response)
+
+    # Convert quotes back to section format
+    section_content = convert_quotes_to_section(quotes_json, current_section_content)
+
+    return section_content

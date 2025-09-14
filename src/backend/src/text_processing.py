@@ -101,43 +101,71 @@ def extract_section_format(infilling_info):
     return '\n'.join(format_template)
 
 def assemble_user_prompt(infilling_info):
-    section_format = extract_section_format(infilling_info)
-    
     return f"""
-Please fill in the following document section using information from the provided source documents.
+Please analyze the following document template section and extract information using verbatim quotes from the provided source documents.
 
-SECTION TO COMPLETE:
+TEMPLATE SECTION TO ANALYZE:
 ---
 {infilling_info}
 ---
 
-IMPORTANT INSTRUCTIONS:
-1. Your output should follow the EXACT same structure and formatting as the section above
-2. Replace any placeholders, empty cells, or "[TO_FILL]" markers with appropriate content from the source documents
-3. Maintain all headings, paragraph structure, and table formatting exactly as shown
-4. For tables: keep the same number of columns and rows, only fill in the data cells
-5. For paragraphs marked as "[PARAGRAPH_TO_FILL]": write complete, relevant paragraphs
-6. If you cannot find information for a specific field, use "INFO_NOT_FOUND" as the value
-7. Do not add any content outside the section structure provided
+INSTRUCTIONS:
+1. Identify each piece of information requested in this template (table cells to fill, placeholders, paragraph content needed, etc.)
+2. For each information request, search the source documents for exact, word-for-word quotes that answer it
+3. Return a JSON object where:
+   - Keys are descriptive names for each information request
+   - Values are objects with "extracted_text" (verbatim quote), "source_document" (filename), and "page_number"
+4. Use "INFO_NOT_FOUND" for extracted_text when no relevant quote can be found
 
-Your response should be the completed section, ready to replace the original template section.
+Example output format:
+{{
+  "project_start_date": {{
+    "extracted_text": "The project commenced on January 15, 2024",
+    "source_document": "project_timeline.pdf",
+    "page_number": 3
+  }},
+  "budget_amount": {{
+    "extracted_text": "Total allocated budget is $2.5 million",
+    "source_document": "financial_report.pdf",
+    "page_number": 12
+  }}
+}}
+
+Return only valid JSON with verbatim quotes from the source documents.
 """
 
 def assemble_system_prompt():
-    return """You are a document completion assistant. Your task is to fill in template sections with information from provided source documents.
+    return """You are a document completion assistant. Your task is to identify information requests from template sections and find exact quotes from source documents.
+
+PROCESS:
+1. **PARSE TEMPLATE**: First, analyze the provided template to identify all individual questions or information requests (fields, table cells, paragraphs to fill)
+2. **FIND QUOTES**: For each information request, search the source documents to find a direct, verbatim quote that answers it
+3. **OUTPUT JSON**: Return a JSON object with this structure:
+
+{
+  "question_or_field_name": {
+    "extracted_text": "exact quote from source document",
+    "source_document": "document_name.pdf",
+    "page_number": 42
+  },
+  "another_field": {
+    "extracted_text": "another verbatim quote",
+    "source_document": "document_name.pdf",
+    "page_number": 15
+  }
+}
 
 KEY REQUIREMENTS:
-1. **PRESERVE EXACT STRUCTURE**: Your output must maintain the identical structure of the input section
-2. **MARKDOWN TABLES**: Keep all tables in markdown format (| column | column |)  
-3. **NO ADDITIONAL CONTENT**: Do not add explanations, comments, or content outside the section structure
-4. **COMPLETE SECTIONS**: Fill in all placeholders, empty cells, and template markers with relevant information
-5. **MISSING INFO**: Use "INFO_NOT_FOUND" when specific information cannot be found in source documents
-6. **MAINTAIN FORMATTING**: Keep all headings, spacing, and structural elements exactly as provided
+1. **VERBATIM QUOTES**: The "extracted_text" must be word-for-word quotes from the source documents
+2. **COMPLETE INFORMATION**: Include source document name and page number for each quote
+3. **FIELD IDENTIFICATION**: Use descriptive names for keys that clearly identify what information is being requested
+4. **MISSING INFO**: If no quote can be found, use: {"extracted_text": "INFO_NOT_FOUND", "source_document": null, "page_number": null}
+5. **VALID JSON**: Ensure your entire response is valid JSON format
 
-Your entire response should be the completed section, properly formatted and ready for direct insertion into the document."""
+Your entire response must be valid JSON containing the quote-based information extraction."""
 
 def parse_ai_response_as_section(response_text):
-    """Parse the AI response as complete section content rather than JSON"""
+    """Parse the AI response as JSON containing quotes and source information"""
     # Clean up any markdown code blocks if present
     response_cleaned = response_text.strip()
     if response_cleaned.startswith("```"):
@@ -147,24 +175,123 @@ def parse_ai_response_as_section(response_text):
         if lines[-1].strip() == "```":
             lines = lines[:-1]
         response_cleaned = '\n'.join(lines)
-    
-    return response_cleaned.strip()
+
+    try:
+        # Parse as JSON
+        quotes_data = json.loads(response_cleaned)
+
+        # Validate structure
+        if not isinstance(quotes_data, dict):
+            raise ValueError("Response is not a JSON object")
+
+        # Validate each quote entry has required fields
+        for key, value in quotes_data.items():
+            if not isinstance(value, dict):
+                raise ValueError(f"Entry {key} is not a dictionary")
+            if "extracted_text" not in value:
+                raise ValueError(f"Entry {key} missing extracted_text")
+            if "source_document" not in value:
+                raise ValueError(f"Entry {key} missing source_document")
+            if "page_number" not in value:
+                raise ValueError(f"Entry {key} missing page_number")
+
+        return quotes_data
+
+    except json.JSONDecodeError as e:
+        # If JSON parsing fails, return error info
+        return {
+            "error": "Invalid JSON response",
+            "details": str(e),
+            "raw_response": response_cleaned[:500]  # First 500 chars for debugging
+        }
+    except ValueError as e:
+        # If structure validation fails
+        return {
+            "error": "Invalid response structure",
+            "details": str(e),
+            "raw_response": response_cleaned[:500]
+        }
 
 def is_valid_response(response, infilling_info):
-    """Validate that the response maintains the expected structure"""
-    # Basic validation - check if response has similar structure to input
-    response_lines = len(response.split('\n'))
-    info_lines = len(infilling_info.split('\n'))
-    
-    # Allow some flexibility but ensure it's not drastically different
-    if response_lines < info_lines * 0.5 or response_lines > info_lines * 2:
+    """Validate that the response is valid JSON with quote structure"""
+    try:
+        # Try to parse as JSON
+        response_cleaned = response.strip()
+        if response_cleaned.startswith("```"):
+            lines = response_cleaned.split('\n')
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            response_cleaned = '\n'.join(lines)
+
+        quotes_data = json.loads(response_cleaned)
+
+        # Must be a dictionary
+        if not isinstance(quotes_data, dict):
+            return False
+
+        # Must have at least one entry
+        if len(quotes_data) == 0:
+            return False
+
+        # Each entry must have the required structure
+        for key, value in quotes_data.items():
+            if not isinstance(value, dict):
+                return False
+            if not all(field in value for field in ["extracted_text", "source_document", "page_number"]):
+                return False
+
+        return True
+
+    except (json.JSONDecodeError, ValueError):
         return False
-    
-    # Check for markdown table consistency if original had tables
-    info_has_tables = '|' in infilling_info
-    response_has_tables = '|' in response
-    
-    if info_has_tables and not response_has_tables:
-        return False
-    
-    return True
+
+def convert_quotes_to_section(quotes_json, original_template):
+    """Convert JSON quotes back to filled section format"""
+    if not isinstance(quotes_json, dict):
+        return original_template
+
+    # If there's an error in the quotes_json, return original template
+    if "error" in quotes_json:
+        print(f"  > Error in AI response: {quotes_json.get('details', 'Unknown error')}")
+        return original_template
+
+    # Start with the original template
+    result_content = original_template
+
+    # Replace placeholders and empty fields with extracted text
+    for field_name, quote_data in quotes_json.items():
+        if isinstance(quote_data, dict) and "extracted_text" in quote_data:
+            extracted_text = quote_data["extracted_text"]
+
+            # Skip if no information was found
+            if extracted_text == "INFO_NOT_FOUND":
+                continue
+
+            # Try to intelligently replace content in the template
+            # This is a simplified approach - could be made more sophisticated
+
+            # Look for common placeholder patterns
+            placeholder_patterns = [
+                "[TO_FILL]", "TBD", "N/A", "_____", "...",
+                "[PARAGRAPH_TO_FILL]", "INFO_NOT_FOUND"
+            ]
+
+            # Replace first occurrence of any placeholder pattern
+            replaced = False
+            for pattern in placeholder_patterns:
+                if pattern in result_content and not replaced:
+                    result_content = result_content.replace(pattern, extracted_text, 1)
+                    replaced = True
+                    break
+
+            # If no placeholder pattern found, try to find empty table cells
+            if not replaced:
+                # Look for empty cells in markdown tables (| | pattern)
+                import re
+                table_cell_pattern = r'\|\s*\|'
+                if re.search(table_cell_pattern, result_content):
+                    result_content = re.sub(table_cell_pattern, f'| {extracted_text} |', result_content, count=1)
+
+    return result_content
