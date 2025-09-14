@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Play, CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { Play, CheckCircle, Clock, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import type { SectionStatus } from '@/app/page';
 
 interface SectionPanelProps {
@@ -13,9 +13,11 @@ interface SectionPanelProps {
     onFillDocument: () => void;
     processingSectionIndex: number | null;
     isProcessingDocument: boolean;
+    onRefreshStatuses: () => void;
+    isRefreshingStatuses: boolean;
 }
 
-export function SectionPanel({ sections, onFillSection, onFillDocument, processingSectionIndex, isProcessingDocument }: SectionPanelProps) {
+export function SectionPanel({ sections, onFillSection, onFillDocument, processingSectionIndex, isProcessingDocument, onRefreshStatuses, isRefreshingStatuses }: SectionPanelProps) {
     const getStatusIcon = (status: SectionStatus['status']) => {
         switch (status) {
             case 'COMPLETE':
@@ -75,7 +77,7 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
                 </p>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0 p-0 px-4 pb-4">
-                <div className="mb-4">
+                <div className="mb-4 space-y-2">
                     <Button
                         onClick={onFillDocument}
                         disabled={isProcessingDocument || processingSectionIndex !== null}
@@ -88,6 +90,25 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
                             </>
                         ) : (
                             'Fill entire document'
+                        )}
+                    </Button>
+                    <Button
+                        onClick={onRefreshStatuses}
+                        disabled={isRefreshingStatuses || processingSectionIndex !== null || isProcessingDocument}
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                    >
+                        {isRefreshingStatuses ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Refreshing...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Refresh Statuses
+                            </>
                         )}
                     </Button>
                 </div>

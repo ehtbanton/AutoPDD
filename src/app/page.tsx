@@ -78,6 +78,7 @@ const Page: FC = () => {
     const [editedText, setEditedText] = useState('');
     const [sections, setSections] = useState<SectionStatus[]>([]);
     const [processingSectionIndex, setProcessingSectionIndex] = useState<number | null>(null);
+    const [isRefreshingStatuses, setIsRefreshingStatuses] = useState<boolean>(false);
 
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -351,8 +352,6 @@ const Page: FC = () => {
             // Update the output viewer after processing
             await updateOutputViewer();
 
-            // Reload sections to get updated status from backend
-            await loadSections();
 
             toast({
                 title: result.success ? "Document Complete" : "Document Processing Failed",
@@ -394,6 +393,7 @@ const Page: FC = () => {
         try {
             await resetTemplate();
             await updateOutputViewer();
+            await loadSections(); // Reload sections after reset
             log("Template reset to blank.");
             toast({
                 title: "Template Reset",
@@ -485,6 +485,20 @@ const Page: FC = () => {
         setEditingPara(null);
     };
 
+    const handleRefreshStatuses = async () => {
+        log("Refreshing section statuses...");
+        setIsRefreshingStatuses(true);
+        try {
+            await loadSections();
+            log("Section statuses refreshed successfully.");
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`Error refreshing section statuses: ${errorMessage}`);
+        } finally {
+            setIsRefreshingStatuses(false);
+        }
+    };
+
     const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -504,18 +518,6 @@ const Page: FC = () => {
         try {
             const result = await processSection(section.name);
 
-            if (result.success) {
-                setSections(prev => prev.map((s, i) =>
-                    i === sectionIndex ? { ...s, status: 'COMPLETE' as const } : s
-                ));
-                log(`Section "${section.name}" completed successfully.`);
-            } else {
-                setSections(prev => prev.map((s, i) =>
-                    i === sectionIndex ? { ...s, status: 'ATTEMPTED' as const } : s
-                ));
-                log(`Section "${section.name}" processing failed: ${result.message}`);
-            }
-
             // Log any processing output from the backend
             if (result.log) {
                 const logLines = result.log.split('\n').filter(line => line.trim());
@@ -525,8 +527,32 @@ const Page: FC = () => {
             // Update the output viewer after processing
             await updateOutputViewer();
 
-            // Reload sections to get updated status from backend
-            await loadSections();
+            // Get the actual status from the updated document by re-fetching this specific section
+            try {
+                const sectionsFromBackend = await fetchSections();
+                const updatedSection = sectionsFromBackend.find(s => s.name === section.name);
+                if (updatedSection) {
+                    const newStatus = mapBackendStatusToFrontend(updatedSection.status);
+                    setSections(prev => prev.map((s, i) =>
+                        i === sectionIndex ? { ...s, status: newStatus } : s
+                    ));
+                    log(`Section "${section.name}" status updated to: ${newStatus}`);
+                } else {
+                    // Fallback to API result if section not found
+                    const fallbackStatus = result.success ? 'COMPLETE' as const : 'ATTEMPTED' as const;
+                    setSections(prev => prev.map((s, i) =>
+                        i === sectionIndex ? { ...s, status: fallbackStatus } : s
+                    ));
+                    log(`Section "${section.name}" status set to: ${fallbackStatus} (fallback)`);
+                }
+            } catch (statusError) {
+                // If we can't get the status from backend, fall back to API result
+                const fallbackStatus = result.success ? 'COMPLETE' as const : 'ATTEMPTED' as const;
+                setSections(prev => prev.map((s, i) =>
+                    i === sectionIndex ? { ...s, status: fallbackStatus } : s
+                ));
+                log(`Section "${section.name}" status set to: ${fallbackStatus} (error fallback)`);
+            }
 
             toast({
                 title: result.success ? "Section Complete" : "Section Processing Failed",
@@ -635,6 +661,8 @@ const Page: FC = () => {
                         onFillDocument={handleFillDocument}
                         processingSectionIndex={processingSectionIndex}
                         isProcessingDocument={isProcessing}
+                        onRefreshStatuses={handleRefreshStatuses}
+                        isRefreshingStatuses={isRefreshingStatuses}
                     />
                 </div>
             </div>
