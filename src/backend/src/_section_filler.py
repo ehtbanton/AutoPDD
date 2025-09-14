@@ -1,6 +1,6 @@
 from gemini_interface import ask_gemini
 from text_processing import assemble_user_prompt, assemble_system_prompt, is_valid_response, parse_ai_response_as_section, convert_quotes_to_section
-from word_editor import fill_document_block_by_block
+from word_editor import fill_document_block_by_block, fill_document_from_json
 import sys
 
 
@@ -79,6 +79,53 @@ def fill_section_block_by_block(GEMINI_CLIENT, infilling_info, uploaded_files_ca
             return quotes_json  # Return the JSON for status checking
         else:
             print("  > Block-by-block filling failed, falling back to section conversion.")
+            sys.stdout.flush()
+
+    # Fallback: Convert quotes back to section format (backwards compatibility)
+    section_content = convert_quotes_to_section(quotes_json if quotes_json else {}, infilling_info)
+    return section_content
+
+
+def fill_document_with_json(GEMINI_CLIENT, infilling_info, uploaded_files_cache, output_doc_path):
+    """Fill document using the streamlined JSON approach with direct text replacement"""
+
+    # Assemble prompts for Gemini
+    system_prompt = assemble_system_prompt()
+    user_prompt = assemble_user_prompt(infilling_info)
+
+    # Ask Gemini for the content, with a few retries for validation
+    response = ""
+    quotes_json = None
+    for i in range(3):  # Retry up to 3 times
+        print(f"  > Gemini API Call (Attempt {i+1})...")
+        sys.stdout.flush()
+        response = ask_gemini(GEMINI_CLIENT, user_prompt, system_prompt, uploaded_files_cache)
+        if is_valid_response(response, infilling_info):
+            print("  > Valid response received from Gemini.")
+            sys.stdout.flush()
+            # Parse the AI response as JSON quotes
+            quotes_json = parse_ai_response_as_section(response)
+            break
+        elif i < 2:
+            print("  > Invalid response format, retrying...")
+            sys.stdout.flush()
+        else:
+            print("  > Failed to get a valid response after 3 attempts.")
+            sys.stdout.flush()
+            # Don't exit, return the best response we have
+            quotes_json = parse_ai_response_as_section(response)
+            break
+
+    if quotes_json and isinstance(quotes_json, dict) and "error" not in quotes_json:
+        # Use the new streamlined JSON filling approach
+        print("  > Filling document using JSON replacement approach...")
+        sys.stdout.flush()
+        success = fill_document_from_json(output_doc_path, quotes_json)
+        if success:
+            print("  > JSON document filling completed successfully.")
+            return quotes_json  # Return the JSON for status checking
+        else:
+            print("  > JSON document filling failed, falling back to section conversion.")
             sys.stdout.flush()
 
     # Fallback: Convert quotes back to section format (backwards compatibility)

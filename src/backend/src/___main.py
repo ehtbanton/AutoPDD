@@ -15,7 +15,7 @@ from context_manager import extract_text_from_folder
 from text_processing import retrieve_contents_list, get_pdd_targets, find_target_location
 from word_editor import load_word_doc_to_string, create_output_doc_from_template
 from word_section_replacer import replace_section_content, check_for_info_not_found
-from _section_filler import fill_section, refill_section, fill_section_block_by_block
+from _section_filler import fill_section, refill_section, fill_section_block_by_block, fill_document_with_json
 
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -116,11 +116,11 @@ def _process_single_target(target_idx, target, force_process=False):
             print("Force processing requested - bypassing status checks")
         sys.stdout.flush()
 
-        # Use the new block-by-block approach by default
+        # Use the new streamlined JSON replacement approach by default
         try:
-            response = fill_section_block_by_block(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE, OUTPUT_PATH)
+            response = fill_document_with_json(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE, OUTPUT_PATH)
         except Exception as e:
-            print(f"  > Block-by-block approach failed: {e}")
+            print(f"  > JSON replacement approach failed: {e}")
             print("  > Falling back to traditional section filling...")
             sys.stdout.flush()
             response = fill_section(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE)
@@ -142,11 +142,11 @@ def _process_single_target(target_idx, target, force_process=False):
     print(f"Section status determined as: {final_status}")
     sys.stdout.flush()
 
-    # For block-by-block approach, only update section status (content already inserted)
+    # For JSON replacement approach, only update section status (content already replaced)
     # For traditional approach, replace the entire section content
     if isinstance(response, dict) and "error" not in response:
-        # Block-by-block approach was used successfully - just update status
-        print(f"  > Block-by-block content insertion completed. Updating section status only.")
+        # JSON replacement approach was used successfully - just update status
+        print(f"  > JSON content replacement completed. Updating section status only.")
         replace_section_content(OUTPUT_PATH, start_marker, end_marker, "", final_status)
     else:
         # Traditional section replacement approach

@@ -288,6 +288,142 @@ def insert_answer_with_source(doc, question_paragraph, answer_text, source_docum
     return answer_para
 
 
+def fill_document_from_json(doc_path, json_data):
+    """
+    Fill Word document by replacing keys with extracted_text and embedding metadata as comments.
+
+    Args:
+        doc_path (str): Path to the Word document
+        json_data (dict): JSON data with structure:
+                         {"question_key": {"extracted_text": "...", "source_document": "...", "page_number": ...}}
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not isinstance(json_data, dict):
+        print(f"Error: Expected dictionary, got {type(json_data)}")
+        return False
+
+    try:
+        doc = docx.Document(doc_path)
+        changes_made = False
+
+        # Iterate through each question/answer pair in the JSON
+        for question_key, quote_data in json_data.items():
+            if not isinstance(quote_data, dict) or 'extracted_text' not in quote_data:
+                print(f"Warning: Invalid quote data for {question_key}")
+                continue
+
+            extracted_text = quote_data.get('extracted_text', '')
+            source_document = quote_data.get('source_document', '')
+            page_number = quote_data.get('page_number', '')
+
+            # Skip if no information was found
+            if extracted_text == "INFO_NOT_FOUND":
+                continue
+
+            # Clean the question key for better matching
+            cleaned_question = question_key.replace('_', ' ').strip()
+
+            # Try to find and replace the question text in the document
+            replaced = replace_text_with_metadata(doc, cleaned_question, extracted_text,
+                                                source_document, page_number)
+
+            if replaced:
+                changes_made = True
+                print(f"  > Replaced '{question_key}' with extracted text")
+            else:
+                print(f"  > Warning: Could not find text to replace for '{question_key}'")
+
+        if changes_made:
+            doc.save(doc_path)
+            print(f"Document updated successfully: {doc_path}")
+            return True
+        else:
+            print("No changes made to document")
+            return False
+
+    except Exception as e:
+        print(f"Error filling document from JSON: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def replace_text_with_metadata(doc, search_text, replacement_text, source_document, page_number):
+    """
+    Find and replace text in the document, then add metadata as a comment.
+
+    Returns:
+        bool: True if text was found and replaced, False otherwise
+    """
+    search_text_lower = search_text.lower().strip()
+    replaced = False
+
+    # Search through all paragraphs
+    for paragraph in doc.paragraphs:
+        if search_text_lower in paragraph.text.lower():
+            # Replace the text
+            paragraph.text = replacement_text
+
+            # Add comment with metadata
+            if source_document and page_number:
+                add_comment_to_paragraph(paragraph, source_document, page_number)
+
+            replaced = True
+            break
+
+    # If not found in paragraphs, search through tables
+    if not replaced:
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        if search_text_lower in paragraph.text.lower():
+                            # Replace the text
+                            paragraph.text = replacement_text
+
+                            # Add comment with metadata
+                            if source_document and page_number:
+                                add_comment_to_paragraph(paragraph, source_document, page_number)
+
+                            replaced = True
+                            break
+                    if replaced:
+                        break
+                if replaced:
+                    break
+            if replaced:
+                break
+
+    return replaced
+
+
+def add_comment_to_paragraph(paragraph, source_document, page_number):
+    """
+    Add a comment to a paragraph containing source metadata.
+    Note: python-docx doesn't directly support comments, so we'll add a hidden run with metadata.
+    """
+    try:
+        # Add a hidden run with JSON metadata for frontend parsing
+        hidden_run = paragraph.add_run()
+        metadata = {
+            "source": source_document,
+            "page": page_number
+        }
+        hidden_run.text = f" [METADATA:{json.dumps(metadata)}]"
+        hidden_run.font.hidden = True
+
+        # Also add a visible source citation
+        citation_run = paragraph.add_run(f" (Source: {source_document}, Page {page_number})")
+        citation_run.font.size = Pt(9)
+        citation_run.font.color.rgb = RGBColor(128, 128, 128)  # Gray color
+        citation_run.italic = True
+
+    except Exception as e:
+        print(f"Warning: Could not add comment to paragraph: {e}")
+
+
 if __name__ == '__main__':
     # For debugging: print the received arguments
     # print(f"Received arguments: {sys.argv}")
