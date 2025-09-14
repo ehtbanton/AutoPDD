@@ -15,9 +15,10 @@ interface SectionPanelProps {
     isProcessingDocument: boolean;
     onRefreshStatuses: () => void;
     isRefreshingStatuses: boolean;
+    onSectionClick?: (sectionIndex: number, sectionName: string) => void;
 }
 
-export function SectionPanel({ sections, onFillSection, onFillDocument, processingSectionIndex, isProcessingDocument, onRefreshStatuses, isRefreshingStatuses }: SectionPanelProps) {
+export function SectionPanel({ sections, onFillSection, onFillDocument, processingSectionIndex, isProcessingDocument, onRefreshStatuses, isRefreshingStatuses, onSectionClick }: SectionPanelProps) {
     const getStatusIcon = (status: SectionStatus['status']) => {
         switch (status) {
             case 'COMPLETE':
@@ -124,7 +125,8 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
                             sections.map((section, index) => (
                                 <div
                                     key={`section-${index}-${section.name}`}
-                                    className="border rounded-lg p-3 bg-card hover:bg-accent/50 transition-colors"
+                                    className="border rounded-lg p-3 bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                                    onClick={() => onSectionClick?.(index, section.name)}
                                 >
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -144,7 +146,10 @@ export function SectionPanel({ sections, onFillSection, onFillDocument, processi
                                     </div>
                                     <div className="flex justify-end">
                                         <Button
-                                            onClick={() => onFillSection(index)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onFillSection(index);
+                                            }}
                                             size="sm"
                                             variant="outline"
                                             disabled={processingSectionIndex === index}

@@ -510,6 +510,156 @@ const Page: FC = () => {
         }
     };
 
+    const handleSectionClick = useCallback((sectionIndex: number, sectionName: string) => {
+        const scrollContainer = scrollContainerRef.current;
+        if (!scrollContainer) return;
+
+        log(`Searching for section: "${sectionName}"`);
+
+        // Find all potential heading elements in the rendered document
+        const allElements = scrollContainer.querySelectorAll('*');
+        let potentialHeadings = Array.from(allElements).filter(el => {
+            const text = el.textContent?.trim() || '';
+            // Look for elements that contain text and might be headings
+            return text.length > 0 && text.length < 200 && // Reasonable heading length
+                   !el.querySelector('*'); // No child elements (leaf text nodes)
+        });
+
+        // Sort by position in document (vertical position)
+        potentialHeadings.sort((a, b) => {
+            const rectA = a.getBoundingClientRect();
+            const rectB = b.getBoundingClientRect();
+            return rectA.top - rectB.top;
+        });
+
+        // Filter out table of contents entries by looking for multiple matches
+        // If we find multiple instances of the same text, prefer the one that appears later (actual heading vs TOC)
+        const textToElements = new Map<string, Element[]>();
+        const normalizeText = (text: string) => {
+            return text.toLowerCase()
+                .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
+                .replace(/\s+/g, ' ')     // Normalize whitespace
+                .trim();
+        };
+
+        // Group elements by normalized text
+        potentialHeadings.forEach(el => {
+            const normalizedText = normalizeText(el.textContent?.trim() || '');
+            if (!textToElements.has(normalizedText)) {
+                textToElements.set(normalizedText, []);
+            }
+            textToElements.get(normalizedText)!.push(el);
+        });
+
+        // For each text, prefer the later occurrence (skip TOC entries)
+        const filteredHeadings: Element[] = [];
+        textToElements.forEach((elements, text) => {
+            if (elements.length === 1) {
+                // Only one instance, include it
+                filteredHeadings.push(elements[0]);
+            } else {
+                // Multiple instances - prefer the one that's not in the first 20% of the document
+                const containerHeight = scrollContainer.scrollHeight;
+                const tocThreshold = containerHeight * 0.2; // First 20% likely contains TOC
+
+                // Find elements that are past the TOC threshold
+                const nonTocElements = elements.filter(el => {
+                    const rect = el.getBoundingClientRect();
+                    const containerRect = scrollContainer.getBoundingClientRect();
+                    const elementTop = scrollContainer.scrollTop + rect.top - containerRect.top;
+                    return elementTop > tocThreshold;
+                });
+
+                if (nonTocElements.length > 0) {
+                    // Use the first non-TOC element
+                    filteredHeadings.push(nonTocElements[0]);
+                } else {
+                    // Fall back to the last element (furthest down the document)
+                    filteredHeadings.push(elements[elements.length - 1]);
+                }
+            }
+        });
+
+        potentialHeadings = filteredHeadings;
+        log(`Found ${potentialHeadings.length} potential headings after filtering TOC duplicates`);
+
+        const normalizedSectionName = normalizeText(sectionName);
+        log(`Normalized section name: "${normalizedSectionName}"`);
+
+        // Try different matching strategies
+        let bestMatch: Element | null = null;
+        let bestMatchScore = 0;
+
+        for (const element of potentialHeadings) {
+            const elementText = element.textContent?.trim() || '';
+            const normalizedElementText = normalizeText(elementText);
+
+            // Strategy 1: Exact match after normalization
+            if (normalizedElementText === normalizedSectionName) {
+                bestMatch = element;
+                bestMatchScore = 100;
+                log(`Found exact match: "${elementText}"`);
+                break;
+            }
+
+            // Strategy 2: Section name is contained in element text
+            if (normalizedElementText.includes(normalizedSectionName)) {
+                const score = 80;
+                if (score > bestMatchScore) {
+                    bestMatch = element;
+                    bestMatchScore = score;
+                    log(`Found container match (${score}): "${elementText}"`);
+                }
+            }
+
+            // Strategy 3: Element text is contained in section name
+            if (normalizedSectionName.includes(normalizedElementText) && normalizedElementText.length > 3) {
+                const score = 60;
+                if (score > bestMatchScore) {
+                    bestMatch = element;
+                    bestMatchScore = score;
+                    log(`Found contained match (${score}): "${elementText}"`);
+                }
+            }
+
+            // Strategy 4: Word overlap (for complex headings)
+            const sectionWords = normalizedSectionName.split(' ').filter(w => w.length > 2);
+            const elementWords = normalizedElementText.split(' ').filter(w => w.length > 2);
+            const commonWords = sectionWords.filter(w => elementWords.includes(w));
+
+            if (commonWords.length > 0 && sectionWords.length > 0) {
+                const score = (commonWords.length / sectionWords.length) * 40;
+                if (score > bestMatchScore && score > 15) { // Only consider if significant overlap
+                    bestMatch = element;
+                    bestMatchScore = score;
+                    log(`Found word overlap match (${score.toFixed(1)}): "${elementText}" (common words: ${commonWords.join(', ')})`);
+                }
+            }
+        }
+
+        if (bestMatch) {
+            // Calculate the scroll position relative to the scroll container
+            const headingRect = bestMatch.getBoundingClientRect();
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const scrollTop = scrollContainer.scrollTop + headingRect.top - containerRect.top - 100; // Add some padding from the top
+
+            // Scroll to the heading
+            scrollContainer.scrollTo({
+                top: Math.max(0, scrollTop), // Ensure we don't scroll to negative position
+                behavior: 'smooth'
+            });
+
+            log(`✓ Navigated to section: "${sectionName}" (matched with: "${bestMatch.textContent?.trim()}", score: ${bestMatchScore})`);
+        } else {
+            log(`✗ Could not find section heading for: "${sectionName}"`);
+            // Debug: log some potential headings for troubleshooting
+            const sampleHeadings = potentialHeadings.slice(0, 5).map(el => el.textContent?.trim()).filter(t => t);
+            if (sampleHeadings.length > 0) {
+                log(`Available headings (sample): ${sampleHeadings.join(' | ')}`);
+            }
+        }
+    }, [log]);
+
     const handleFillSection = async (sectionIndex: number) => {
         const section = sections[sectionIndex];
         log(`Processing section: ${section.name}`);
@@ -663,6 +813,7 @@ const Page: FC = () => {
                         isProcessingDocument={isProcessing}
                         onRefreshStatuses={handleRefreshStatuses}
                         isRefreshingStatuses={isRefreshingStatuses}
+                        onSectionClick={handleSectionClick}
                     />
                 </div>
             </div>
