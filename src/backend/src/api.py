@@ -235,11 +235,15 @@ def reinitialize_backend():
         logger.info("Reinitializing backend...")
         initialize()
 
+        # Get the fresh, updated values from the ___main__ module
+        initialized_status = get_initialized_status()
+        pdd_targets = get_current_pdd_targets()
+
         return jsonify({
             'success': True,
             'message': 'Backend reinitialized successfully',
-            'initialized': INITIALIZED,
-            'sections_count': len(PDD_TARGETS) if INITIALIZED else 0
+            'initialized': initialized_status,
+            'sections_count': len(pdd_targets) if initialized_status else 0
         })
     except Exception as e:
         logger.error(f"Error reinitializing backend: {str(e)}")

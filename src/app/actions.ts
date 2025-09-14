@@ -319,14 +319,15 @@ export async function reinitializeBackend(): Promise<{ success: boolean; message
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
         }
 
         const data = await response.json();
 
         return {
             success: data.success || false,
-            message: data.message || 'Backend reinitialized',
+            message: data.message || (data.success ? 'Backend reinitialized' : 'Backend reinitialization failed'),
             sections_count: data.sections_count
         };
     } catch (error) {

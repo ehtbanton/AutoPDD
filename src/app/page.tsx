@@ -193,14 +193,15 @@ const Page: FC = () => {
 
                 // Reinitialize backend to refresh sections
                 log("Reinitializing backend to detect sections...");
-                const reinitResult = await reinitializeBackend();
+                const reinitResult = await reinitializeBackend(); // <-- Await this call
+
                 if (reinitResult.success) {
                     log(`Backend reinitialized successfully. Found ${reinitResult.sections_count || 0} sections.`);
+                    await loadSections(); // <-- Now this will get the new sections
                 } else {
                     log(`Warning: Backend reinitialize failed: ${reinitResult.message}`);
                 }
 
-                await loadSections();
                 toast({
                     title: "Upload Successful",
                     description: `Template "${file.name}" has been loaded.`,
