@@ -1,13 +1,48 @@
 "use client";
 
 import { Worker, Viewer } from '@react-pdf-viewer/core';
+import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+import { useEffect, useRef } from 'react';
 
 interface PdfViewerProps {
     fileUrl: string;
+    targetPageNumber?: number | null;
+    onNavigationComplete?: () => void;
 }
 
-export default function PdfViewer({ fileUrl }: PdfViewerProps) {
+export default function PdfViewer({ fileUrl, targetPageNumber, onNavigationComplete }: PdfViewerProps) {
+    const defaultLayoutPluginInstance = defaultLayoutPlugin();
+    const hasNavigated = useRef(false);
+
+    // Handle page navigation when target page changes
+    useEffect(() => {
+        if (targetPageNumber && targetPageNumber > 0 && !hasNavigated.current) {
+            hasNavigated.current = true;
+
+            // Small delay to ensure PDF is loaded before jumping to page
+            const timer = setTimeout(() => {
+                const pageIndex = targetPageNumber - 1; // Convert to 0-based index
+                defaultLayoutPluginInstance.toolbarPluginInstance.jumpToPage(pageIndex);
+
+                // Call the navigation complete callback
+                if (onNavigationComplete) {
+                    onNavigationComplete();
+                }
+            }, 500);
+
+            return () => clearTimeout(timer);
+        }
+    }, [targetPageNumber, onNavigationComplete, defaultLayoutPluginInstance]);
+
+    // Reset navigation flag when target page is cleared
+    useEffect(() => {
+        if (!targetPageNumber) {
+            hasNavigated.current = false;
+        }
+    }, [targetPageNumber]);
+
     // If no file URL is provided, display a placeholder message
     if (!fileUrl) {
         return (
@@ -28,7 +63,10 @@ export default function PdfViewer({ fileUrl }: PdfViewerProps) {
 
     return (
         <Worker workerUrl={`https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`}>
-            <Viewer fileUrl={fileUrl} />
+            <Viewer
+                fileUrl={fileUrl}
+                plugins={[defaultLayoutPluginInstance]}
+            />
         </Worker>
     );
 }

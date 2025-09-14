@@ -17,9 +17,12 @@ interface ContextViewerProps {
     selectedContextFile: ContextFile | undefined;
     onContextSelect: (fileName: string) => void;
     onRemoveAllContexts: () => void;
+    targetSourceDocument?: string | null;
+    targetPageNumber?: number | null;
+    onNavigationComplete?: () => void;
 }
 
-export function ContextViewer({ contextFile, onContextUpload, contextFiles, selectedContextFile, onContextSelect, onRemoveAllContexts }: ContextViewerProps) {
+export function ContextViewer({ contextFile, onContextUpload, contextFiles, selectedContextFile, onContextSelect, onRemoveAllContexts, targetSourceDocument, targetPageNumber, onNavigationComplete }: ContextViewerProps) {
     const [fileUrl, setFileUrl] = useState<string>('');
 
     useEffect(() => {
@@ -36,7 +39,13 @@ export function ContextViewer({ contextFile, onContextUpload, contextFiles, sele
 
     const getDisplayContent = () => {
         if (contextFile) {
-            return <PdfViewer fileUrl={fileUrl} />;
+            return (
+                <PdfViewer
+                    fileUrl={fileUrl}
+                    targetPageNumber={targetPageNumber}
+                    onNavigationComplete={onNavigationComplete}
+                />
+            );
         }
         return (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4 text-center">

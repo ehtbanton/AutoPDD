@@ -80,6 +80,10 @@ const Page: FC = () => {
     const [processingSectionIndex, setProcessingSectionIndex] = useState<number | null>(null);
     const [isRefreshingStatuses, setIsRefreshingStatuses] = useState<boolean>(false);
 
+    // Source navigation state
+    const [targetSourceDocument, setTargetSourceDocument] = useState<string | null>(null);
+    const [targetPageNumber, setTargetPageNumber] = useState<number | null>(null);
+
     const log = useCallback((message: string) => {
         const timedMessage = `[${new Date().toLocaleTimeString()}] ${message}`;
         setLogs((prevLogs) => [...prevLogs, timedMessage]);
@@ -496,6 +500,67 @@ const Page: FC = () => {
         }
     };
 
+    const handleDocRightClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault(); // Prevent default context menu
+
+        const target = e.target as HTMLElement;
+        const clickedElement = target.closest('p, span, div');
+
+        if (clickedElement) {
+            // Look for hidden metadata in the element or its children
+            const metadata = extractSourceMetadata(clickedElement);
+
+            if (metadata) {
+                handleSourceNavigation(metadata.source, metadata.page);
+            } else {
+                log("No source information found for the clicked element");
+                toast({
+                    title: "No Source Information",
+                    description: "This text doesn't have associated source information.",
+                    variant: "default",
+                });
+            }
+        }
+    };
+
+    const extractSourceMetadata = (element: Element): { source: string; page: number } | null => {
+        // Look for hidden metadata text in the element
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            null
+        );
+
+        let node;
+        while (node = walker.nextNode()) {
+            const textContent = node.textContent || '';
+
+            // Look for our metadata format: [METADATA:{"source":"document.pdf","page":42}]
+            const metadataMatch = textContent.match(/\[METADATA:({[^}]+})\]/);
+            if (metadataMatch) {
+                try {
+                    const metadata = JSON.parse(metadataMatch[1]);
+                    if (metadata.source && metadata.page) {
+                        return { source: metadata.source, page: metadata.page };
+                    }
+                } catch (e) {
+                    console.error('Failed to parse metadata JSON:', e);
+                }
+            }
+        }
+
+        // Alternative: Look for visible source citations
+        const sourceMatch = element.textContent?.match(/\(Source:\s*([^,]+),\s*Page\s*(\d+)\)/i);
+        if (sourceMatch) {
+            return {
+                source: sourceMatch[1].trim(),
+                page: parseInt(sourceMatch[2], 10)
+            };
+        }
+
+        return null;
+    };
+
     const handleSaveEdit = async () => {
         if (editingPara) {
             try {
@@ -546,6 +611,30 @@ const Page: FC = () => {
         if (e.key === 'Escape') {
             e.preventDefault();
             handleCancelEdit();
+        }
+    };
+
+    const handleSourceNavigation = (sourceDocument: string, pageNumber: number) => {
+        log(`Navigating to source: ${sourceDocument}, page ${pageNumber}`);
+
+        // Find and select the matching context file
+        const targetFile = contextFiles.find(file =>
+            file.name.includes(sourceDocument.replace('.pdf', '')) ||
+            sourceDocument.includes(file.name.replace('.pdf', ''))
+        );
+
+        if (targetFile) {
+            setSelectedContextFile(targetFile);
+            setTargetSourceDocument(sourceDocument);
+            setTargetPageNumber(pageNumber);
+            log(`Found matching context file: ${targetFile.name}`);
+        } else {
+            log(`Could not find context file matching: ${sourceDocument}`);
+            toast({
+                title: "Source Document Not Found",
+                description: `Could not find the source document "${sourceDocument}" in uploaded context files.`,
+                variant: "destructive",
+            });
         }
     };
 
@@ -791,6 +880,12 @@ const Page: FC = () => {
                         selectedContextFile={selectedContextFile}
                         onContextSelect={handleContextSelect}
                         onRemoveAllContexts={handleRemoveAllContexts}
+                        targetSourceDocument={targetSourceDocument}
+                        targetPageNumber={targetPageNumber}
+                        onNavigationComplete={() => {
+                            setTargetSourceDocument(null);
+                            setTargetPageNumber(null);
+                        }}
                     />
                 </div>
                 <div className="xl:col-span-2 flex flex-col min-h-0">
@@ -817,7 +912,7 @@ const Page: FC = () => {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent ref={scrollContainerRef} className="relative flex-1 overflow-y-auto p-4 bg-secondary" onClick={handleDocClick}>
+                            <CardContent ref={scrollContainerRef} className="relative flex-1 overflow-y-auto p-4 bg-secondary" onClick={handleDocClick} onContextMenu={handleDocRightClick}>
                                 <DocxViewer file={templateFile} scrollContainerRef={scrollContainerRef} />
                                 {editingPara && (
                                     <div
