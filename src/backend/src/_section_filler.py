@@ -120,17 +120,33 @@ def fill_document_with_json(GEMINI_CLIENT, infilling_info, uploaded_files_cache,
         # Use the new streamlined JSON filling approach
         print("  > Filling document using JSON replacement approach...")
         sys.stdout.flush()
-        success = fill_document_from_json(output_doc_path, quotes_json)
-        if success:
-            print("  > JSON document filling completed successfully.")
-            return quotes_json  # Return the JSON for status checking
+        fill_result = fill_document_from_json(output_doc_path, quotes_json)
+
+        if fill_result["success"]:
+            print(f"  > JSON document filling completed successfully: {fill_result['message']}")
+            # Return a structured result for status checking
+            return {
+                "type": "json_success",
+                "data": quotes_json,
+                "changes_made": fill_result["changes_made"],
+                "message": fill_result["message"],
+                "errors": fill_result["errors"]
+            }
         else:
-            print("  > JSON document filling failed, falling back to section conversion.")
+            print(f"  > JSON document filling failed: {fill_result['message']}")
+            if fill_result["errors"]:
+                for error in fill_result["errors"]:
+                    print(f"  >   Error: {error}")
+            print("  > Falling back to section conversion.")
             sys.stdout.flush()
 
     # Fallback: Convert quotes back to section format (backwards compatibility)
     section_content = convert_quotes_to_section(quotes_json if quotes_json else {}, infilling_info)
-    return section_content
+    return {
+        "type": "section_fallback",
+        "data": section_content,
+        "message": "Used fallback section conversion approach"
+    }
 
 
 def refill_section(GEMINI_CLIENT, infilling_info, uploaded_files_cache):

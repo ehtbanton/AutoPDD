@@ -23,14 +23,39 @@ export default function PdfViewer({ fileUrl, targetPageNumber, onNavigationCompl
 
             // Small delay to ensure PDF is loaded before jumping to page
             const timer = setTimeout(() => {
-                const pageIndex = targetPageNumber - 1; // Convert to 0-based index
-                defaultLayoutPluginInstance.toolbarPluginInstance.jumpToPage(pageIndex);
+                try {
+                    const pageIndex = targetPageNumber - 1; // Convert to 0-based index
 
-                // Call the navigation complete callback
-                if (onNavigationComplete) {
-                    onNavigationComplete();
+                    // Check if the plugin and method are available
+                    if (defaultLayoutPluginInstance?.toolbarPluginInstance?.jumpToPage) {
+                        defaultLayoutPluginInstance.toolbarPluginInstance.jumpToPage(pageIndex);
+                        console.log(`✓ Navigated to page ${targetPageNumber} (index ${pageIndex})`);
+                    } else {
+                        console.warn('PDF navigation not available - plugin may not be loaded yet');
+                        // Retry navigation after a longer delay
+                        const retryTimer = setTimeout(() => {
+                            if (defaultLayoutPluginInstance?.toolbarPluginInstance?.jumpToPage) {
+                                defaultLayoutPluginInstance.toolbarPluginInstance.jumpToPage(pageIndex);
+                                console.log(`✓ Navigated to page ${targetPageNumber} (index ${pageIndex}) on retry`);
+                            }
+                        }, 1500);
+
+                        return () => clearTimeout(retryTimer);
+                    }
+
+                    // Call the navigation complete callback
+                    if (onNavigationComplete) {
+                        onNavigationComplete();
+                    }
+                } catch (error) {
+                    console.error('Error navigating to PDF page:', error);
+
+                    // Still call completion callback to prevent hanging state
+                    if (onNavigationComplete) {
+                        onNavigationComplete();
+                    }
                 }
-            }, 500);
+            }, 800); // Increased delay for more reliable loading
 
             return () => clearTimeout(timer);
         }

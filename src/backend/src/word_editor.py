@@ -8,6 +8,7 @@ from docx.oxml import OxmlElement # <--- ADD THIS IMPORT
 from docx.text.paragraph import Paragraph # <--- ADD THIS IMPORT
 from docx.shared import RGBColor, Pt
 import sys
+import os
 
 # --- HELPER FUNCTIONS ---
 def _iter_block_items(parent):
@@ -298,56 +299,109 @@ def fill_document_from_json(doc_path, json_data):
                          {"question_key": {"extracted_text": "...", "source_document": "...", "page_number": ...}}
 
     Returns:
-        bool: True if successful, False otherwise
+        dict: {"success": bool, "changes_made": int, "errors": list, "message": str}
     """
+    result = {
+        "success": False,
+        "changes_made": 0,
+        "errors": [],
+        "message": ""
+    }
+
     if not isinstance(json_data, dict):
-        print(f"Error: Expected dictionary, got {type(json_data)}")
-        return False
+        result["errors"].append(f"Expected dictionary, got {type(json_data)}")
+        result["message"] = "Invalid input data format"
+        return result
+
+    if "error" in json_data:
+        result["errors"].append(f"AI response error: {json_data.get('details', 'Unknown error')}")
+        result["message"] = "AI generated error response"
+        return result
+
+    if not doc_path or not os.path.exists(doc_path):
+        result["errors"].append(f"Document not found at: {doc_path}")
+        result["message"] = "Document file not accessible"
+        return result
 
     try:
         doc = docx.Document(doc_path)
-        changes_made = False
+        changes_made = 0
+        not_found_items = []
+        replaced_items = []
 
         # Iterate through each question/answer pair in the JSON
         for question_key, quote_data in json_data.items():
             if not isinstance(quote_data, dict) or 'extracted_text' not in quote_data:
-                print(f"Warning: Invalid quote data for {question_key}")
+                result["errors"].append(f"Invalid quote data structure for '{question_key}'")
                 continue
 
             extracted_text = quote_data.get('extracted_text', '')
             source_document = quote_data.get('source_document', '')
             page_number = quote_data.get('page_number', '')
 
-            # Skip if no information was found
+            # Handle INFO_NOT_FOUND cases
             if extracted_text == "INFO_NOT_FOUND":
+                not_found_items.append(question_key)
+                print(f"  > No information found for: {question_key}")
+                continue
+
+            if not extracted_text or not extracted_text.strip():
+                result["errors"].append(f"Empty extracted text for '{question_key}'")
                 continue
 
             # Clean the question key for better matching
             cleaned_question = question_key.replace('_', ' ').strip()
 
             # Try to find and replace the question text in the document
-            replaced = replace_text_with_metadata(doc, cleaned_question, extracted_text,
-                                                source_document, page_number)
+            try:
+                replaced = replace_text_with_metadata(doc, cleaned_question, extracted_text,
+                                                    source_document, page_number)
 
-            if replaced:
-                changes_made = True
-                print(f"  > Replaced '{question_key}' with extracted text")
-            else:
-                print(f"  > Warning: Could not find text to replace for '{question_key}'")
+                if replaced:
+                    changes_made += 1
+                    replaced_items.append(question_key)
+                    print(f"  > ✓ Replaced '{question_key}' with extracted text")
+                else:
+                    result["errors"].append(f"Could not find text to replace for '{question_key}'")
+                    print(f"  > ✗ Could not find text to replace for '{question_key}'")
 
-        if changes_made:
-            doc.save(doc_path)
-            print(f"Document updated successfully: {doc_path}")
-            return True
+            except Exception as e:
+                result["errors"].append(f"Error replacing '{question_key}': {str(e)}")
+                print(f"  > Error replacing '{question_key}': {e}")
+
+        # Save document if changes were made
+        if changes_made > 0:
+            try:
+                doc.save(doc_path)
+                result["success"] = True
+                result["changes_made"] = changes_made
+                result["message"] = f"Successfully updated {changes_made} items in document"
+                print(f"✓ Document updated successfully: {changes_made} replacements made")
+
+                if not_found_items:
+                    result["message"] += f". {len(not_found_items)} items had no source information"
+
+            except Exception as save_error:
+                result["errors"].append(f"Failed to save document: {str(save_error)}")
+                result["message"] = "Changes made but failed to save document"
+                return result
         else:
-            print("No changes made to document")
-            return False
+            result["message"] = "No changes made to document"
+            if not_found_items:
+                result["message"] += f" ({len(not_found_items)} items had no source information)"
+
+        # Log summary
+        print(f"  Summary: {changes_made} replaced, {len(not_found_items)} not found, {len(result['errors'])} errors")
+
+        return result
 
     except Exception as e:
-        print(f"Error filling document from JSON: {e}")
+        result["errors"].append(f"Document processing error: {str(e)}")
+        result["message"] = "Failed to process document"
+        print(f"✗ Critical error filling document: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return result
 
 
 def replace_text_with_metadata(doc, search_text, replacement_text, source_document, page_number):

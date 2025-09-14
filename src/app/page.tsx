@@ -524,41 +524,73 @@ const Page: FC = () => {
     };
 
     const extractSourceMetadata = (element: Element): { source: string; page: number } | null => {
-        // Look for hidden metadata text in the element
-        const walker = document.createTreeWalker(
-            element,
-            NodeFilter.SHOW_TEXT,
-            null
-        );
+        try {
+            // Look for hidden metadata text in the element
+            const walker = document.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT,
+                null
+            );
 
-        let node;
-        while (node = walker.nextNode()) {
-            const textContent = node.textContent || '';
+            let node;
+            while (node = walker.nextNode()) {
+                const textContent = node.textContent || '';
 
-            // Look for our metadata format: [METADATA:{"source":"document.pdf","page":42}]
-            const metadataMatch = textContent.match(/\[METADATA:({[^}]+})\]/);
-            if (metadataMatch) {
-                try {
-                    const metadata = JSON.parse(metadataMatch[1]);
-                    if (metadata.source && metadata.page) {
-                        return { source: metadata.source, page: metadata.page };
+                // Look for our metadata format: [METADATA:{"source":"document.pdf","page":42}]
+                const metadataMatch = textContent.match(/\[METADATA:({[^}]+})\]/);
+                if (metadataMatch) {
+                    try {
+                        const metadata = JSON.parse(metadataMatch[1]);
+                        if (metadata.source && typeof metadata.page === 'number' && metadata.page > 0) {
+                            log(`Found hidden metadata: ${metadata.source}, page ${metadata.page}`);
+                            return { source: metadata.source, page: metadata.page };
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse metadata JSON:', metadataMatch[1], e);
+                        log(`Warning: Invalid metadata format in document`);
                     }
-                } catch (e) {
-                    console.error('Failed to parse metadata JSON:', e);
                 }
             }
-        }
 
-        // Alternative: Look for visible source citations
-        const sourceMatch = element.textContent?.match(/\(Source:\s*([^,]+),\s*Page\s*(\d+)\)/i);
-        if (sourceMatch) {
-            return {
-                source: sourceMatch[1].trim(),
-                page: parseInt(sourceMatch[2], 10)
-            };
-        }
+            // Alternative: Look for visible source citations
+            const sourceMatch = element.textContent?.match(/\(Source:\s*([^,]+),\s*Page\s*(\d+)\)/i);
+            if (sourceMatch) {
+                const page = parseInt(sourceMatch[2], 10);
+                if (page > 0) {
+                    log(`Found visible citation: ${sourceMatch[1].trim()}, page ${page}`);
+                    return {
+                        source: sourceMatch[1].trim(),
+                        page: page
+                    };
+                }
+            }
 
-        return null;
+            // Enhanced search: Look in parent elements as well
+            let parent = element.parentElement;
+            let searchDepth = 0;
+            while (parent && searchDepth < 3) {
+                const parentMatch = parent.textContent?.match(/\(Source:\s*([^,]+),\s*Page\s*(\d+)\)/i);
+                if (parentMatch) {
+                    const page = parseInt(parentMatch[2], 10);
+                    if (page > 0) {
+                        log(`Found citation in parent element: ${parentMatch[1].trim()}, page ${page}`);
+                        return {
+                            source: parentMatch[1].trim(),
+                            page: page
+                        };
+                    }
+                }
+                parent = parent.parentElement;
+                searchDepth++;
+            }
+
+            return null;
+
+        } catch (error) {
+            console.error('Error extracting source metadata:', error);
+            log(`Error extracting source metadata: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
+        }
     };
 
     const handleSaveEdit = async () => {

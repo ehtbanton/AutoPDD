@@ -126,32 +126,84 @@ def _process_single_target(target_idx, target, force_process=False):
             response = fill_section(GEMINI_CLIENT, infilling_info, UPLOADED_FILES_CACHE)
 
     print("\n--- AI Generated Section Content ---")
-    print(response)
+
+    # Handle structured response format
+    if isinstance(response, dict):
+        if response.get("type") == "json_success":
+            print(f"✓ JSON Success: {response['message']}")
+            print(f"  Changes made: {response['changes_made']}")
+            if response.get("errors"):
+                print(f"  Warnings: {len(response['errors'])} issues encountered")
+                for error in response["errors"][:3]:  # Show first 3 errors
+                    print(f"    - {error}")
+        elif response.get("type") == "section_fallback":
+            print(f"→ Fallback: {response['message']}")
+            print(f"  Section content length: {len(response['data'])} chars")
+        else:
+            print(response)
+    else:
+        print(response)
+
     print("----------------------------------------\n")
     sys.stdout.flush()
 
-    if not response or response == "":
+    if not response:
         print(f"CRITICAL: No content generated for section '{start_marker}'. Skipping update.")
         replace_section_content(OUTPUT_PATH, start_marker, end_marker, "", "SECTION_FAILED_GENERATION")
         return
 
-    # Check if there are any INFO_NOT_FOUND markers in the response
-    info_not_found = check_for_info_not_found(response)
-    final_status = "SECTION_ATTEMPTED" if info_not_found else "SECTION_COMPLETE"
+    # Determine section status based on response type and content
+    final_status = "SECTION_COMPLETE"
 
-    print(f"Section status determined as: {final_status}")
-    sys.stdout.flush()
+    if isinstance(response, dict):
+        if response.get("type") == "json_success":
+            # Check if there were any INFO_NOT_FOUND items or errors
+            data = response.get("data", {})
+            info_not_found = any(
+                item.get("extracted_text") == "INFO_NOT_FOUND"
+                for item in data.values()
+                if isinstance(item, dict)
+            )
+            has_errors = len(response.get("errors", [])) > 0
 
-    # For JSON replacement approach, only update section status (content already replaced)
-    # For traditional approach, replace the entire section content
-    if isinstance(response, dict) and "error" not in response:
-        # JSON replacement approach was used successfully - just update status
-        print(f"  > JSON content replacement completed. Updating section status only.")
-        replace_section_content(OUTPUT_PATH, start_marker, end_marker, "", final_status)
+            if info_not_found or has_errors:
+                final_status = "SECTION_ATTEMPTED"
+            else:
+                final_status = "SECTION_COMPLETE"
+
+            print(f"  > JSON approach used - content already inserted into document.")
+            print(f"Section status determined as: {final_status}")
+
+            # Only update section status marker (content already replaced)
+            replace_section_content(OUTPUT_PATH, start_marker, end_marker, "", final_status)
+
+        elif response.get("type") == "section_fallback":
+            # Check traditional section content for INFO_NOT_FOUND
+            section_content = response.get("data", "")
+            info_not_found = check_for_info_not_found(section_content)
+            final_status = "SECTION_ATTEMPTED" if info_not_found else "SECTION_COMPLETE"
+
+            print(f"Section status determined as: {final_status}")
+            print(f"  > Using traditional section replacement approach.")
+
+            # Replace the entire section content
+            replace_section_content(OUTPUT_PATH, start_marker, end_marker, section_content, final_status)
+        else:
+            # Handle unexpected response format
+            final_status = "SECTION_ATTEMPTED"
+            print(f"Warning: Unexpected response format. Status: {final_status}")
+            replace_section_content(OUTPUT_PATH, start_marker, end_marker, str(response), final_status)
     else:
-        # Traditional section replacement approach
+        # Handle string response (legacy)
+        info_not_found = check_for_info_not_found(response)
+        final_status = "SECTION_ATTEMPTED" if info_not_found else "SECTION_COMPLETE"
+
+        print(f"Section status determined as: {final_status}")
         section_content = response if isinstance(response, str) else str(response)
         replace_section_content(OUTPUT_PATH, start_marker, end_marker, section_content, final_status)
+
+    print(f"✓ Section '{start_marker}' processing complete with status: {final_status}")
+    sys.stdout.flush()
 
 def process_document():
     """Process the entire document by iterating through all sections."""
