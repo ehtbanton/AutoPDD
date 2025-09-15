@@ -113,14 +113,19 @@ SECTION TO COMPLETE:
 
 IMPORTANT INSTRUCTIONS:
 1. Your output should follow the EXACT same structure and formatting as the section above
-2. Replace any placeholders, empty cells, or "[TO_FILL]" markers with appropriate content from the source documents
-3. Maintain all headings, paragraph structure, and table formatting exactly as shown
-4. For tables: keep the same number of columns and rows, only fill in the data cells
-5. For paragraphs marked as "[PARAGRAPH_TO_FILL]": write complete, relevant paragraphs
-6. If you cannot find information for a specific field, use "INFO_NOT_FOUND" as the value
-7. Do not add any content outside the section structure provided
-8. **SOURCE REFERENCES**: After each factual statement, data point, or piece of information, add a reference in the format [Source: filename.pdf/docx] or [Source: filename.pdf/docx, Page X] when page information is available
-9. For table cells containing specific data, include the source reference within or immediately after the cell content
+2. For each piece of information, use the format: "<infotype>: <info> (<source>)"
+   - <infotype>: The type or category of information (e.g., "Project Name", "Budget", "Timeline", "Risk Level")
+   - <info>: The actual information from the source documents
+   - <source>: The filename, optionally with page number (e.g., "requirements.pdf", "design_doc.docx, Page 5")
+3. Examples:
+   - "Project Name: Advanced Traffic Management System (requirements.pdf)"
+   - "Budget: $2.5 million (budget_report.xlsx, Page 1)"
+   - "Primary Risk: Weather delays during construction (risk_assessment.pdf, Page 3)"
+4. For tables: each cell should contain data in this format
+5. For paragraphs: each sentence or fact should follow this structure
+6. If you cannot find information for a specific field, use "<infotype>: INFO_NOT_FOUND"
+7. Maintain all headings, paragraph structure, and table formatting exactly as shown
+8. Do not add any content outside the section structure provided
 
 Your response should be the completed section, ready to replace the original template section.
 """
@@ -132,10 +137,13 @@ KEY REQUIREMENTS:
 1. **PRESERVE EXACT STRUCTURE**: Your output must maintain the identical structure of the input section
 2. **MARKDOWN TABLES**: Keep all tables in markdown format (| column | column |)
 3. **NO ADDITIONAL CONTENT**: Do not add explanations, comments, or content outside the section structure
-4. **COMPLETE SECTIONS**: Fill in all placeholders, empty cells, and template markers with relevant information
-5. **MISSING INFO**: Use "INFO_NOT_FOUND" when specific information cannot be found in source documents
+4. **STRUCTURED FORMAT**: Every piece of information must follow the format "<infotype>: <info> (<source>)"
+   - <infotype>: The category/type of the information being provided
+   - <info>: The actual data/information from source documents
+   - <source>: Source filename with optional page number
+5. **MISSING INFO**: Use "<infotype>: INFO_NOT_FOUND" when specific information cannot be found in source documents
 6. **MAINTAIN FORMATTING**: Keep all headings, spacing, and structural elements exactly as provided
-7. **SOURCE CITATIONS**: Always include source references in the format [Source: filename.pdf/docx] or [Source: filename.pdf/docx, Page X] after factual information, data points, and specific claims. For table data, include citations within or immediately after cell content.
+7. **CONSISTENT SOURCING**: Every factual claim, data point, and piece of information must include its source in parentheses
 
 Your entire response should be the completed section, properly formatted and ready for direct insertion into the document."""
 

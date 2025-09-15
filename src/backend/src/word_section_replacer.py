@@ -75,9 +75,30 @@ def markdown_to_word_table(doc, md_table_text):
             if col_idx < len(table.rows[row_idx + 1].cells):
                 cell = table.rows[row_idx + 1].cells[col_idx]
 
-                # Format citations in table cells
-                if '[Source:' in cell_data:
-                    # Clear the cell and add formatted content
+                # Format structured content in table cells
+                structured_pattern = r'^([^:]+):\s*([^(]+)\s*\(([^)]+)\)$'
+                match = re.match(structured_pattern, cell_data.strip())
+
+                if match:
+                    # Handle structured format: <infotype>: <info> (<source>)
+                    infotype, info, source = match.groups()
+                    cell.text = ""
+                    para = cell.paragraphs[0]
+
+                    # Add infotype with bold formatting
+                    infotype_run = para.add_run(f"{infotype.strip()}: ")
+                    infotype_run.font.bold = True
+
+                    # Add info with normal formatting
+                    info_run = para.add_run(info.strip())
+
+                    # Add source with smaller, italic formatting
+                    source_run = para.add_run(f" ({source.strip()})")
+                    source_run.font.size = Pt(8)  # Even smaller in tables
+                    source_run.font.italic = True
+
+                elif '[Source:' in cell_data:
+                    # Handle old citation format
                     cell.text = ""
                     para = cell.paragraphs[0]
 
@@ -99,26 +120,47 @@ def markdown_to_word_table(doc, md_table_text):
     return table
 
 def add_formatted_paragraph_with_citations(doc, insert_position, text):
-    """Add a paragraph with properly formatted source citations"""
+    """Add a paragraph with properly formatted structured content: <infotype>: <info> (<source>)"""
     new_para_element = OxmlElement("w:p")
     insert_position.addnext(new_para_element)
     new_para = Paragraph(new_para_element, doc)
 
-    # Check if the text contains source citations
-    citation_pattern = r'\[Source: [^\]]+\]'
-    parts = re.split(citation_pattern, text)
-    citations = re.findall(citation_pattern, text)
+    # Pattern to match the structured format: <infotype>: <info> (<source>)
+    structured_pattern = r'^([^:]+):\s*([^(]+)\s*\(([^)]+)\)$'
+    match = re.match(structured_pattern, text.strip())
 
-    # Add text parts and citations with different formatting
-    for i, part in enumerate(parts):
-        if part.strip():
-            run = new_para.add_run(part)
+    if match:
+        infotype, info, source = match.groups()
 
-        # Add citation if it exists for this part
-        if i < len(citations):
-            citation_run = new_para.add_run(citations[i])
-            citation_run.font.size = Pt(9)  # Smaller font for citations
-            citation_run.font.italic = True
+        # Add infotype with bold formatting
+        infotype_run = new_para.add_run(f"{infotype.strip()}: ")
+        infotype_run.font.bold = True
+
+        # Add info with normal formatting
+        info_run = new_para.add_run(info.strip())
+
+        # Add source with smaller, italic formatting
+        source_run = new_para.add_run(f" ({source.strip()})")
+        source_run.font.size = Pt(9)
+        source_run.font.italic = True
+    else:
+        # Fallback: check for old citation format or just add as plain text
+        citation_pattern = r'\[Source: [^\]]+\]'
+        if '[Source:' in text:
+            parts = re.split(citation_pattern, text)
+            citations = re.findall(citation_pattern, text)
+
+            for i, part in enumerate(parts):
+                if part.strip():
+                    run = new_para.add_run(part)
+
+                if i < len(citations):
+                    citation_run = new_para.add_run(citations[i])
+                    citation_run.font.size = Pt(9)
+                    citation_run.font.italic = True
+        else:
+            # Plain text
+            new_para.add_run(text)
 
     return new_para_element
 
@@ -192,8 +234,9 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
                     
                     # Add paragraph if it has content
                     if line_stripped and not line_stripped.startswith('#'):
-                        # Check if line contains source citations and format accordingly
-                        if '[Source:' in line_stripped:
+                        # Check if line contains structured format or citations and format accordingly
+                        structured_pattern = r'^([^:]+):\s*([^(]+)\s*\(([^)]+)\)$'
+                        if re.match(structured_pattern, line_stripped) or '[Source:' in line_stripped:
                             insert_position = add_formatted_paragraph_with_citations(doc, insert_position, line_stripped)
                         else:
                             new_para_element = OxmlElement("w:p")
