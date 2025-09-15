@@ -6,6 +6,7 @@ from docx.oxml.table import CT_Tbl
 from docx.oxml import OxmlElement
 from docx.text.paragraph import Paragraph
 from docx.table import Table
+from docx.shared import Pt
 
 def _iter_block_items(parent):
     """Iterate through paragraphs and tables in document order"""
@@ -57,24 +58,69 @@ def markdown_to_word_table(doc, md_table_text):
     table_data = parse_markdown_table(md_table_text)
     if not table_data:
         return None
-    
+
     # Create table with appropriate dimensions
     rows_needed = len(table_data['rows']) + 1  # +1 for header
     cols_needed = len(table_data['headers'])
-    
+
     table = doc.add_table(rows=rows_needed, cols=cols_needed)
-    
+
     # Add header row
     for i, header in enumerate(table_data['headers']):
         table.rows[0].cells[i].text = header
-    
-    # Add data rows
+
+    # Add data rows with proper citation formatting
     for row_idx, row_data in enumerate(table_data['rows']):
         for col_idx, cell_data in enumerate(row_data):
             if col_idx < len(table.rows[row_idx + 1].cells):
-                table.rows[row_idx + 1].cells[col_idx].text = cell_data
-    
+                cell = table.rows[row_idx + 1].cells[col_idx]
+
+                # Format citations in table cells
+                if '[Source:' in cell_data:
+                    # Clear the cell and add formatted content
+                    cell.text = ""
+                    para = cell.paragraphs[0]
+
+                    citation_pattern = r'\[Source: [^\]]+\]'
+                    parts = re.split(citation_pattern, cell_data)
+                    citations = re.findall(citation_pattern, cell_data)
+
+                    for i, part in enumerate(parts):
+                        if part.strip():
+                            run = para.add_run(part)
+
+                        if i < len(citations):
+                            citation_run = para.add_run(citations[i])
+                            citation_run.font.size = Pt(8)  # Even smaller in tables
+                            citation_run.font.italic = True
+                else:
+                    cell.text = cell_data
+
     return table
+
+def add_formatted_paragraph_with_citations(doc, insert_position, text):
+    """Add a paragraph with properly formatted source citations"""
+    new_para_element = OxmlElement("w:p")
+    insert_position.addnext(new_para_element)
+    new_para = Paragraph(new_para_element, doc)
+
+    # Check if the text contains source citations
+    citation_pattern = r'\[Source: [^\]]+\]'
+    parts = re.split(citation_pattern, text)
+    citations = re.findall(citation_pattern, text)
+
+    # Add text parts and citations with different formatting
+    for i, part in enumerate(parts):
+        if part.strip():
+            run = new_para.add_run(part)
+
+        # Add citation if it exists for this part
+        if i < len(citations):
+            citation_run = new_para.add_run(citations[i])
+            citation_run.font.size = Pt(9)  # Smaller font for citations
+            citation_run.font.italic = True
+
+    return new_para_element
 
 def replace_section_content(doc_path, start_marker, end_marker, new_content, status):
     """Replace a section with new content, preserving document structure"""
@@ -146,11 +192,15 @@ def replace_section_content(doc_path, start_marker, end_marker, new_content, sta
                     
                     # Add paragraph if it has content
                     if line_stripped and not line_stripped.startswith('#'):
-                        new_para_element = OxmlElement("w:p")
-                        insert_position.addnext(new_para_element)
-                        new_para = Paragraph(new_para_element, doc)
-                        new_para.text = line_stripped
-                        insert_position = new_para_element
+                        # Check if line contains source citations and format accordingly
+                        if '[Source:' in line_stripped:
+                            insert_position = add_formatted_paragraph_with_citations(doc, insert_position, line_stripped)
+                        else:
+                            new_para_element = OxmlElement("w:p")
+                            insert_position.addnext(new_para_element)
+                            new_para = Paragraph(new_para_element, doc)
+                            new_para.text = line_stripped
+                            insert_position = new_para_element
                     elif not line_stripped:
                         # Empty line - add empty paragraph for spacing
                         new_para_element = OxmlElement("w:p")

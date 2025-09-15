@@ -102,7 +102,7 @@ def extract_section_format(infilling_info):
 
 def assemble_user_prompt(infilling_info):
     section_format = extract_section_format(infilling_info)
-    
+
     return f"""
 Please fill in the following document section using information from the provided source documents.
 
@@ -119,6 +119,8 @@ IMPORTANT INSTRUCTIONS:
 5. For paragraphs marked as "[PARAGRAPH_TO_FILL]": write complete, relevant paragraphs
 6. If you cannot find information for a specific field, use "INFO_NOT_FOUND" as the value
 7. Do not add any content outside the section structure provided
+8. **SOURCE REFERENCES**: After each factual statement, data point, or piece of information, add a reference in the format [Source: filename.pdf/docx] or [Source: filename.pdf/docx, Page X] when page information is available
+9. For table cells containing specific data, include the source reference within or immediately after the cell content
 
 Your response should be the completed section, ready to replace the original template section.
 """
@@ -128,11 +130,12 @@ def assemble_system_prompt():
 
 KEY REQUIREMENTS:
 1. **PRESERVE EXACT STRUCTURE**: Your output must maintain the identical structure of the input section
-2. **MARKDOWN TABLES**: Keep all tables in markdown format (| column | column |)  
+2. **MARKDOWN TABLES**: Keep all tables in markdown format (| column | column |)
 3. **NO ADDITIONAL CONTENT**: Do not add explanations, comments, or content outside the section structure
 4. **COMPLETE SECTIONS**: Fill in all placeholders, empty cells, and template markers with relevant information
 5. **MISSING INFO**: Use "INFO_NOT_FOUND" when specific information cannot be found in source documents
 6. **MAINTAIN FORMATTING**: Keep all headings, spacing, and structural elements exactly as provided
+7. **SOURCE CITATIONS**: Always include source references in the format [Source: filename.pdf/docx] or [Source: filename.pdf/docx, Page X] after factual information, data points, and specific claims. For table data, include citations within or immediately after cell content.
 
 Your entire response should be the completed section, properly formatted and ready for direct insertion into the document."""
 
@@ -155,16 +158,16 @@ def is_valid_response(response, infilling_info):
     # Basic validation - check if response has similar structure to input
     response_lines = len(response.split('\n'))
     info_lines = len(infilling_info.split('\n'))
-    
-    # Allow some flexibility but ensure it's not drastically different
-    if response_lines < info_lines * 0.5 or response_lines > info_lines * 2:
+
+    # Allow more flexibility for responses with source citations (they'll be longer)
+    if response_lines < info_lines * 0.5 or response_lines > info_lines * 3:
         return False
-    
+
     # Check for markdown table consistency if original had tables
     info_has_tables = '|' in infilling_info
     response_has_tables = '|' in response
-    
+
     if info_has_tables and not response_has_tables:
         return False
-    
+
     return True
