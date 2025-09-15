@@ -8,26 +8,35 @@ import sys
 def _extract_text_from_file(file_path):
     """
     A helper function to extract text and tables from a single file.
-    
+
     Args:
         file_path (str): The full path to the .pdf or .docx file.
-    
+
     Returns:
-        str: The extracted text content, with tables in Markdown format.
-             Returns an empty string if the file cannot be processed.
+        tuple: (content_string, file_metadata)
+            content_string: The extracted text content, with tables in Markdown format.
+            file_metadata: Dict with file path and page count info for linking
     """
     content_parts = []
     filename = os.path.basename(file_path)
+    file_metadata = {
+        'full_path': file_path,
+        'filename': filename,
+        'total_pages': 0
+    }
 
     try:
         # --- Handle PDF files ---
         if filename.lower().endswith('.pdf'):
             with pdfplumber.open(file_path) as pdf:
+                file_metadata['total_pages'] = len(pdf.pages)
                 for i, page in enumerate(pdf.pages):
+                    page_number = i + 1
                     page_text = page.extract_text()
                     if page_text:
-                        content_parts.append(page_text)
-                    
+                        # Add page marker for reference tracking
+                        content_parts.append(f"\n--- PAGE {page_number} START ---\n{page_text}\n--- PAGE {page_number} END ---\n")
+
                     # Extract tables and convert to Markdown
                     tables = page.extract_tables()
                     for table in tables:
@@ -36,14 +45,22 @@ def _extract_text_from_file(file_path):
                         separator = "| " + " | ".join(["---"] * len(table[0])) + " |"
                         rows = ["| " + " | ".join(str(cell) if cell is not None else '' for cell in row) + " |" for row in table[1:]]
                         markdown_table = "\n".join([header, separator] + rows)
-                        content_parts.append(f"\n\n--- Table on Page {i+1} ---\n{markdown_table}\n")
+                        content_parts.append(f"\n\n--- Table on Page {page_number} ---\n{markdown_table}\n")
 
         # --- Handle Word (.docx) files ---
         elif filename.lower().endswith('.docx'):
             doc = docx.Document(file_path)
+            file_metadata['total_pages'] = 1  # Word docs don't have clear page boundaries
+
+            # Estimate page numbers based on content length (rough approximation)
+            paragraph_count = 0
             for para in doc.paragraphs:
-                content_parts.append(para.text)
-            
+                paragraph_count += 1
+                if para.text.strip():
+                    # Rough page estimation: ~25 paragraphs per page
+                    estimated_page = (paragraph_count // 25) + 1
+                    content_parts.append(f"[Page {estimated_page}] {para.text}")
+
             # Extract tables and convert to Markdown
             for i, table in enumerate(doc.tables):
                 if not table.rows: continue
@@ -57,9 +74,9 @@ def _extract_text_from_file(file_path):
     except Exception as e:
         print(f"Could not process file '{filename}'. Reason: {e}")
         sys.stdout.flush()
-        return "" # Return empty string on failure
+        return "", file_metadata # Return empty string and metadata on failure
 
-    return "\n".join(content_parts)
+    return "\n".join(content_parts), file_metadata
 
 
 def extract_text_from_folder(folder_path):
@@ -126,12 +143,13 @@ def extract_text_from_folder(folder_path):
             print(f"-> Processing: {filename}")
             sys.stdout.flush()
             
-            text_content = _extract_text_from_file(file_path)
-            
+            text_content, file_metadata = _extract_text_from_file(file_path)
+
             if text_content:
                 all_context.append({
                     'filename': filename,
-                    'text_content': text_content
+                    'text_content': text_content,
+                    'file_metadata': file_metadata
                 })
                 print(f"   ...extracted {len(text_content)} characters.")
                 sys.stdout.flush()

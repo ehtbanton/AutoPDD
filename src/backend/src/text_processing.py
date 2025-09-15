@@ -113,12 +113,13 @@ SECTION TO COMPLETE:
 
 IMPORTANT INSTRUCTIONS:
 1. Your output should follow the EXACT same structure and formatting as the section above
-2. For each piece of information, use the format: "<infotype>: <info> (<source>)"
+2. For each piece of information, use the format: "<infotype>: <info> (<source>, Page X)"
    - <infotype>: The type or category of information (e.g., "Project Name", "Budget", "Timeline", "Risk Level")
    - <info>: The actual information from the source documents
-   - <source>: The filename, optionally with page number (e.g., "requirements.pdf", "design_doc.docx, Page 5")
+   - <source>: The filename with page number (e.g., "requirements.pdf, Page 5", "design_doc.docx, Page 2")
+   - ALWAYS include page numbers when available in the source documents
 3. Examples:
-   - "Project Name: Advanced Traffic Management System (requirements.pdf)"
+   - "Project Name: Advanced Traffic Management System (requirements.pdf, Page 1)"
    - "Budget: $2.5 million (budget_report.xlsx, Page 1)"
    - "Primary Risk: Weather delays during construction (risk_assessment.pdf, Page 3)"
 4. For tables: each cell should contain data in this format

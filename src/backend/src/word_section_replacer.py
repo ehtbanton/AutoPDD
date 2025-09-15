@@ -7,6 +7,52 @@ from docx.oxml import OxmlElement
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 from docx.shared import Pt
+from docx.oxml.shared import qn
+
+# Global variable to store context file metadata for hyperlink creation
+_context_file_metadata = {}
+
+def set_context_file_metadata(metadata_dict):
+    """Set the global context file metadata for hyperlink creation"""
+    global _context_file_metadata
+    _context_file_metadata = metadata_dict
+
+def create_file_hyperlink(paragraph, text, file_path, page_number=None):
+    """Create a hyperlink to a local file with optional page navigation"""
+    # For PDF files, we can create a link that opens to a specific page
+    if file_path.lower().endswith('.pdf') and page_number:
+        # Use PDF page fragment syntax: file.pdf#page=N
+        hyperlink_target = f"file:///{file_path.replace(os.sep, '/')}#page={page_number}"
+    else:
+        # For other files, just link to the file
+        hyperlink_target = f"file:///{file_path.replace(os.sep, '/')}"
+
+    # Create hyperlink element
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('w:anchor'), 'file_link')
+
+    # Create run for hyperlink
+    run = OxmlElement('w:r')
+
+    # Add run properties for hyperlink styling
+    rPr = OxmlElement('w:rPr')
+    color = OxmlElement('w:color')
+    color.set(qn('w:val'), '0000FF')  # Blue color
+    underline = OxmlElement('w:u')
+    underline.set(qn('w:val'), 'single')
+    rPr.append(color)
+    rPr.append(underline)
+    run.append(rPr)
+
+    # Add text
+    text_elem = OxmlElement('w:t')
+    text_elem.text = text
+    run.append(text_elem)
+
+    hyperlink.append(run)
+    paragraph._element.append(hyperlink)
+
+    return hyperlink
 
 def _iter_block_items(parent):
     """Iterate through paragraphs and tables in document order"""
@@ -92,10 +138,40 @@ def markdown_to_word_table(doc, md_table_text):
                     # Add info with normal formatting
                     info_run = para.add_run(info.strip())
 
-                    # Add source with smaller, italic formatting
-                    source_run = para.add_run(f" ({source.strip()})")
-                    source_run.font.size = Pt(8)  # Even smaller in tables
-                    source_run.font.italic = True
+                    # Parse source to extract filename and page number
+                    source_text = source.strip()
+                    filename = None
+                    page_number = None
+
+                    # Check for page number in source
+                    page_match = re.search(r'(.+?),\s*Page\s+(\d+)', source_text)
+                    if page_match:
+                        filename = page_match.group(1).strip()
+                        page_number = int(page_match.group(2))
+                    else:
+                        filename = source_text
+
+                    # Add opening parenthesis
+                    para.add_run(" (")
+
+                    # Try to create hyperlink if we have file metadata
+                    file_path = None
+                    for file_metadata in _context_file_metadata.values():
+                        if file_metadata.get('filename', '').lower() == filename.lower():
+                            file_path = file_metadata.get('full_path')
+                            break
+
+                    if file_path and os.path.exists(file_path):
+                        # Create hyperlink for the source
+                        create_file_hyperlink(para, source_text, file_path, page_number)
+                    else:
+                        # Fallback: add source as regular text with formatting
+                        source_run = para.add_run(source_text)
+                        source_run.font.size = Pt(8)  # Even smaller in tables
+                        source_run.font.italic = True
+
+                    # Add closing parenthesis
+                    para.add_run(")")
 
                 elif '[Source:' in cell_data:
                     # Handle old citation format
@@ -139,10 +215,40 @@ def add_formatted_paragraph_with_citations(doc, insert_position, text):
         # Add info with normal formatting
         info_run = new_para.add_run(info.strip())
 
-        # Add source with smaller, italic formatting
-        source_run = new_para.add_run(f" ({source.strip()})")
-        source_run.font.size = Pt(9)
-        source_run.font.italic = True
+        # Parse source to extract filename and page number
+        source_text = source.strip()
+        filename = None
+        page_number = None
+
+        # Check for page number in source
+        page_match = re.search(r'(.+?),\s*Page\s+(\d+)', source_text)
+        if page_match:
+            filename = page_match.group(1).strip()
+            page_number = int(page_match.group(2))
+        else:
+            filename = source_text
+
+        # Add opening parenthesis
+        new_para.add_run(" (")
+
+        # Try to create hyperlink if we have file metadata
+        file_path = None
+        for file_metadata in _context_file_metadata.values():
+            if file_metadata.get('filename', '').lower() == filename.lower():
+                file_path = file_metadata.get('full_path')
+                break
+
+        if file_path and os.path.exists(file_path):
+            # Create hyperlink for the source
+            create_file_hyperlink(new_para, source_text, file_path, page_number)
+        else:
+            # Fallback: add source as regular text with formatting
+            source_run = new_para.add_run(source_text)
+            source_run.font.size = Pt(9)
+            source_run.font.italic = True
+
+        # Add closing parenthesis
+        new_para.add_run(")")
     else:
         # Fallback: check for old citation format or just add as plain text
         citation_pattern = r'\[Source: [^\]]+\]'

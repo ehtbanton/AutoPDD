@@ -14,7 +14,7 @@ from gemini_interface import setup_gemini, ask_gemini, upload_files_to_gemini
 from context_manager import extract_text_from_folder
 from text_processing import retrieve_contents_list, get_pdd_targets, find_target_location
 from word_editor import load_word_doc_to_string, create_output_doc_from_template
-from word_section_replacer import replace_section_content, check_for_info_not_found
+from word_section_replacer import replace_section_content, check_for_info_not_found, set_context_file_metadata
 from _section_filler import fill_section, refill_section
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -57,8 +57,27 @@ def initialize():
     PDD_TARGETS = get_pdd_targets(CONTENTS_LIST)
 
     THERE_ARE_NEW_FILES = extract_text_from_folder(context_folder)
+
+    # Load context metadata for hyperlink creation
+    context_txt_path = os.path.join(context_folder, "all_context.txt")
+    if os.path.exists(context_txt_path):
+        import json
+        try:
+            with open(context_txt_path, 'r', encoding='utf-8') as f:
+                context_data = json.loads(f.read())
+                # Extract file metadata for hyperlink creation
+                file_metadata = {}
+                for entry in context_data:
+                    if 'file_metadata' in entry:
+                        filename = entry['filename']
+                        file_metadata[filename] = entry['file_metadata']
+                set_context_file_metadata(file_metadata)
+                print(f"Loaded metadata for {len(file_metadata)} context files for hyperlink creation.")
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"Warning: Could not load context metadata: {e}")
+
     GEMINI_CLIENT = setup_gemini()
-    UPLOADED_FILES_CACHE = upload_files_to_gemini([os.path.join(context_folder, "all_context.txt")])
+    UPLOADED_FILES_CACHE = upload_files_to_gemini([context_txt_path])
 
     INITIALIZED = True
     print("Initialization complete!")
