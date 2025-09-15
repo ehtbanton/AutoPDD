@@ -110,10 +110,47 @@ def replace_section_in_word_doc(doc_path, start_marker, end_marker, ai_markdown_
     doc.save(doc_path)
 
 
+def replace_paragraph_text_by_index(doc, paragraph_index, new_text):
+    """
+    Finds and replaces the text in a paragraph by its index, preserving the original formatting.
+    This function iterates through all paragraphs in the document, including those within tables,
+    counting them in order to find the paragraph at the specified index.
+    """
+    current_index = 0
+
+    # Iterate through all blocks in the document using the existing helper function
+    for block in _iter_block_items(doc):
+        if isinstance(block, docx.text.paragraph.Paragraph):
+            if current_index == paragraph_index:
+                # Found the target paragraph - clear its existing content
+                for run in block.runs:
+                    run.clear()
+                # Add a new run with the new text, preserving the paragraph's style
+                block.add_run(new_text)
+                return True # Indicate success
+            current_index += 1
+        elif isinstance(block, docx.table.Table):
+            # Iterate through paragraphs in table cells
+            for row in block.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        if current_index == paragraph_index:
+                            # Found the target paragraph - clear its existing content
+                            for run in p.runs:
+                                run.clear()
+                            # Add a new run with the new text, preserving the paragraph's style
+                            p.add_run(new_text)
+                            return True # Indicate success
+                        current_index += 1
+
+    return False # Indicate that the paragraph index was not found
+
+
 def replace_paragraph_text(doc, old_text, new_text):
     """
     Finds and replaces the text in a paragraph, preserving the original formatting.
     This function iterates through all paragraphs in the document, including those within tables.
+    (DEPRECATED: Use replace_paragraph_text_by_index for more reliable paragraph identification)
     """
     for p in doc.paragraphs:
         if p.text.strip() == old_text.strip():
@@ -138,14 +175,18 @@ def replace_paragraph_text(doc, old_text, new_text):
 if __name__ == '__main__':
     # For debugging: print the received arguments
     # print(f"Received arguments: {sys.argv}")
-    
+
     if len(sys.argv) != 4:
-        print("Usage: python word_editor.py <doc_path> <old_text> <new_text>")
+        print("Usage: python word_editor.py <doc_path> <paragraph_index> <new_text>")
         print(f"Error: Expected 4 arguments, but received {len(sys.argv)}.")
         sys.exit(1)
 
     doc_path = sys.argv[1]
-    old_text = sys.argv[2]
+    try:
+        paragraph_index = int(sys.argv[2])
+    except ValueError:
+        print(f"Error: paragraph_index must be a valid integer, received: '{sys.argv[2]}'")
+        sys.exit(1)
     new_text = sys.argv[3]
 
     if not os.path.exists(doc_path):
@@ -154,11 +195,11 @@ if __name__ == '__main__':
 
     try:
         document = docx.Document(doc_path)
-        if replace_paragraph_text(document, old_text, new_text):
+        if replace_paragraph_text_by_index(document, paragraph_index, new_text):
             document.save(doc_path)
             print("SUCCESS")
         else:
-            print(f"Error: Could not find the paragraph with the text: '{old_text}'")
+            print(f"Error: Could not find paragraph at index: {paragraph_index}")
             sys.exit(1)
     except Exception as e:
         print(f"An error occurred: {e}")

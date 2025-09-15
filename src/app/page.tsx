@@ -74,7 +74,7 @@ const Page: FC = () => {
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const initialLoadDone = useRef(false);
-    const [editingPara, setEditingPara] = useState<{ text: string; top: number; left: number, width: number } | null>(null);
+    const [editingPara, setEditingPara] = useState<{ text: string; top: number; left: number, width: number; index: number } | null>(null);
     const [editedText, setEditedText] = useState('');
     const [sections, setSections] = useState<SectionStatus[]>([]);
     const [processingSectionIndex, setProcessingSectionIndex] = useState<number | null>(null);
@@ -484,13 +484,26 @@ const Page: FC = () => {
         const target = e.target as HTMLElement;
         const p = target.closest('p');
         if (p) {
-            const containerRect = scrollContainerRef.current!.getBoundingClientRect();
+            // Calculate paragraph index by counting all paragraphs before this one
+            const container = scrollContainerRef.current!;
+            const allParagraphs = container.querySelectorAll('p');
+            let paragraphIndex = -1;
+
+            for (let i = 0; i < allParagraphs.length; i++) {
+                if (allParagraphs[i] === p) {
+                    paragraphIndex = i;
+                    break;
+                }
+            }
+
+            const containerRect = container.getBoundingClientRect();
             const pRect = p.getBoundingClientRect();
             setEditingPara({
                 text: p.innerText,
-                top: pRect.top - containerRect.top + scrollContainerRef.current!.scrollTop,
+                top: pRect.top - containerRect.top + container.scrollTop,
                 left: pRect.left - containerRect.left,
                 width: pRect.width,
+                index: paragraphIndex,
             });
             setEditedText(p.innerText);
         }
@@ -499,8 +512,8 @@ const Page: FC = () => {
     const handleSaveEdit = async () => {
         if (editingPara) {
             try {
-                log(`Updating text: "${editingPara.text}" to "${editedText}"`);
-                await updateParagraph(editingPara.text, editedText);
+                log(`Updating paragraph at index ${editingPara.index}: "${editingPara.text}" to "${editedText}"`);
+                await updateParagraph(editingPara.index, editedText);
                 log("Update successful. Refreshing viewer.");
                 setEditingPara(null);
                 await updateOutputViewer();

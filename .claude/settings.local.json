@@ -9,7 +9,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:github.com)",
       "Bash(curl:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

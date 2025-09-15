@@ -167,14 +167,14 @@ export async function getTemplateName(): Promise<string | null> {
     }
 }
 
-export async function updateParagraph(oldText: string, newText: string) {
+export async function updateParagraph(paragraphIndex: number, newText: string) {
     await ensureDir(UPLOAD_DIR_OUTPUT);
     const outputFilePath = path.join(UPLOAD_DIR_OUTPUT, OUTPUT_FILE_NAME);
 
     const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', 'word_editor.py');
     const pythonCwd = path.join(process.cwd(), 'src', 'backend', 'src');
 
-    const args = [pythonScriptPath, outputFilePath, oldText, newText];
+    const args = [pythonScriptPath, outputFilePath, paragraphIndex.toString(), newText];
 
     const tryCommand = (command: string) => {
         return new Promise<string>((resolve, reject) => {
