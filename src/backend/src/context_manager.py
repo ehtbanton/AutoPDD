@@ -176,3 +176,16 @@ def extract_text_from_folder(folder_path):
         sys.stdout.flush()
 
     return changes_made
+
+if __name__ == "__main__":
+    # Allow the script to be run directly to regenerate context files
+    if len(sys.argv) > 1:
+        folder_path = sys.argv[1]
+        print(f"Regenerating context file for folder: {folder_path}")
+        changes_made = extract_text_from_folder(folder_path)
+        if changes_made:
+            print("Context file updated successfully!")
+        else:
+            print("No changes needed - context file is up to date.")
+    else:
+        print("Usage: python context_manager.py <folder_path>")

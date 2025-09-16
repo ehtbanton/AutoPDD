@@ -48,11 +48,17 @@ export async function uploadContextFile(fileName: string, fileContentBase64: str
     await ensureDir(UPLOAD_DIR_CONTEXT);
     const filePath = path.join(UPLOAD_DIR_CONTEXT, fileName);
     await fs.writeFile(filePath, Buffer.from(fileContentBase64, 'base64'));
+
+    // Regenerate all_context.txt after uploading new context file
+    await regenerateContextFile();
 }
 
 export async function removeAllContexts() {
     await ensureDir(UPLOAD_DIR_CONTEXT);
     await cleanDir(UPLOAD_DIR_CONTEXT);
+
+    // Regenerate all_context.txt after removing all context files
+    await regenerateContextFile();
 }
 
 export async function resetTemplate() {
@@ -336,5 +342,61 @@ export async function reinitializeBackend(): Promise<{ success: boolean; message
             success: false,
             message: `Error reinitializing backend: ${error instanceof Error ? error.message : String(error)}`
         };
+    }
+}
+
+async function regenerateContextFile(): Promise<void> {
+    try {
+        const pythonScriptPath = path.join(process.cwd(), 'src', 'backend', 'src', 'context_manager.py');
+        const pythonCwd = path.join(process.cwd(), 'src', 'backend', 'src');
+        const contextDir = UPLOAD_DIR_CONTEXT;
+
+        const tryCommand = (command: string) => {
+            return new Promise<void>((resolve, reject) => {
+                const process = spawn(command, [pythonScriptPath, contextDir], {
+                    cwd: pythonCwd,
+                    shell: true
+                });
+
+                let stdout = '';
+                let stderr = '';
+
+                process.stdout.on('data', (data) => {
+                    stdout += data.toString();
+                });
+
+                process.stderr.on('data', (data) => {
+                    stderr += data.toString();
+                });
+
+                process.on('close', (code) => {
+                    if (code === 0) {
+                        console.log('Context file regenerated successfully:', stdout);
+                        resolve();
+                    } else {
+                        console.error(`Context regeneration failed with code ${code}:`, stderr);
+                        reject(new Error(`Exit code: ${code}, stderr: ${stderr}`));
+                    }
+                });
+
+                process.on('error', (err) => {
+                    reject(err);
+                });
+            });
+        };
+
+        try {
+            await tryCommand('python');
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                // If 'python' is not found, try 'python3'
+                await tryCommand('python3');
+            } else {
+                throw error;
+            }
+        }
+    } catch (error) {
+        console.error('Error regenerating context file:', error);
+        // Don't throw the error - we want the file upload to succeed even if context regeneration fails
     }
 }
